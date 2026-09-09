@@ -945,7 +945,6 @@ function renderPageTarget(target: ScreenshotTarget, t: (key: string, options?: R
         optionCacheEnabled
         optionCachePollIntervalMinutes={30}
         optionCacheOverview={{ fresh_providers: 2, stale_providers: 1, missing_providers: 0, last_refresh_at: null }}
-        onlyShowOpenAiSmsCountries={false}
         checkUpdatesOnLaunch
         updateCheckBusy={false}
         updateInstallBusy={false}
@@ -957,7 +956,6 @@ function renderPageTarget(target: ScreenshotTarget, t: (key: string, options?: R
         httpSecretOverridden={false}
         onOptionCacheEnabledChange={noop}
         onOptionCachePollIntervalChange={noop}
-        onOnlyShowOpenAiSmsCountriesChange={noop}
         onCheckUpdatesOnLaunchChange={noop}
         onInstallUpdate={noop}
         onOpenUpdateRelease={noop}

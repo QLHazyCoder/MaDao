@@ -218,24 +218,14 @@ curl -X POST http://127.0.0.1:7822/api/providers/herosms/reuse-pool \
   "auto_fallback": true,
   "option_cache_enabled": true,
   "option_cache_poll_interval_minutes": 30,
-  "only_show_openai_sms_countries": false,
   "check_updates_on_launch": true
 }
 ```
 
 当前这组设置会持久化到用户配置目录下的 `runtime-settings.json`。
 
-其中 `only_show_openai_sms_countries` 的业务语义固定为：
-
-```text
-当前平台支持国家 - (whatsapp_regions - sms_regions)
-```
-
-解释：
-
-- `sms_regions` 内的国家始终保留
-- 只排除 `whatsapp-only` 国家
-- 如果一个国家同时存在于 `sms_regions` 和 `whatsapp_regions`，仍然视为“可接收短信”，必须继续显示
+国家、服务、运营商、价格和库存均以所选服务商返回的数据为准。产品名称仅用于
+将内部服务键映射到该服务商的原生服务代码；运行时不会查询或使用目标平台的地区名单。
 
 ## 错误处理建议
 

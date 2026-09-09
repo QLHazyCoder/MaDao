@@ -1,11 +1,11 @@
 use crate::error::SmsError;
 use crate::models::{
     AcquireCodeRequest, AcquireCodeResponse, AcquirePath, ActivityEntry, ActivityFeed,
-    ActivityKind, ActivityLevel, LogEntry, NotificationFeed, OpenAiSmsRegionsCache,
-    OptionCacheOverview, OptionCacheState, OptionItem, OptionListResponse, PollCodeRequest,
-    PollCodeResponse, ProviderBalance, ProviderBalanceCacheEntry, ProviderCapabilityMatrix,
-    ProviderDynamicOptions, ProviderManifestList, ProviderManifestSaveResponse,
-    ProviderOperatorsQuery, ProviderOptionCacheEntry, ProviderPriceQuery, ProviderPriceResponse,
+    ActivityKind, ActivityLevel, LogEntry, NotificationFeed, OptionCacheOverview, OptionCacheState,
+    OptionItem, OptionListResponse, PollCodeRequest, PollCodeResponse, ProviderBalance,
+    ProviderBalanceCacheEntry, ProviderCapabilityMatrix, ProviderDynamicOptions,
+    ProviderManifestList, ProviderManifestSaveResponse, ProviderOperatorsQuery,
+    ProviderOptionCacheEntry, ProviderPriceQuery, ProviderPriceResponse,
     ProviderRawOptionAuditEntry, ProviderReorderRequest, ProviderServicesQuery, ProviderSummary,
     ReleaseCodeRequest, ReleaseCodeResponse, RemoteStatsSummaryItem, RemoteStatsSummaryQuery,
     RemoteStatsSummaryResponse, ReuseCapability, ReusePoolEntry, ReusePoolSummary,
@@ -41,7 +41,6 @@ use chrono::{Duration, Utc};
 use parking_lot::RwLock;
 use plugin_sdk::ProviderManifest;
 use reqwest::Client;
-use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -56,10 +55,6 @@ const DEFAULT_NOTIFICATION_FEED_LIMIT: usize = 20;
 const AUTO_RELEASE_RETRY_INTERVAL_SEC: i64 = 5;
 const AUTO_RELEASE_OWNER_LEASE_SEC: i64 = 15;
 const DEFAULT_REUSE_TTL_HOURS: i64 = 24;
-const OPENAI_AUTH_BOOTSTRAP_URL: &str = "https://auth.openai.com";
-const OPENAI_SMS_REGIONS_CACHE_TTL_HOURS: i64 = 24;
-const OPENAI_SMS_DYNAMIC_CONFIG_KEY: &str =
-    "phone-verification-sms-regions-by-verification-channel";
 const LOW_BALANCE_PATTERNS: [&str; 8] = [
     "no balance",
     "not enough balance",
@@ -193,7 +188,6 @@ pub struct SmsService {
     provider_raw_option_audit: RwLock<ProviderRawOptionAuditStore>,
     provider_balance_cache: RwLock<BTreeMap<String, ProviderBalanceCacheEntry>>,
     reuse_pool: RwLock<HashMap<String, Vec<ReusePoolEntry>>>,
-    openai_sms_regions_cache: RwLock<OpenAiSmsRegionsCache>,
     ticket_stats_events: RwLock<VecDeque<TicketStatsEvent>>,
     stats_sync_status: RwLock<StatsSyncStatus>,
     callback_subscriptions: RwLock<BTreeMap<String, Vec<TicketCallbackSubscription>>>,
@@ -293,38 +287,6 @@ struct ProviderPricesRuntimeEffect {
 struct ProviderPricesRuntimeError {
     error: SmsError,
     uow: Option<RuntimeUnitOfWork>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiBootstrapPage {
-    #[serde(rename = "track")]
-    _track: Option<String>,
-    #[serde(rename = "statsigClientInitData")]
-    statsig_client_init_data: OpenAiStatsigClientInitData,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiStatsigClientInitData {
-    bootstrap: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiStatsigBootstrap {
-    #[serde(default)]
-    dynamic_configs: BTreeMap<String, OpenAiDynamicConfigEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiDynamicConfigEntry {
-    value: OpenAiSmsRegionsPayload,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct OpenAiSmsRegionsPayload {
-    #[serde(default)]
-    sms: Vec<String>,
-    #[serde(default)]
-    whatsapp: Vec<String>,
 }
 
 #[derive(Default)]
@@ -443,7 +405,6 @@ impl SmsService {
             activity,
             provider_balance_cache,
             reuse_pool,
-            openai_sms_regions_cache,
             ticket_stats_events,
             stats_sync_status,
             ..
@@ -463,7 +424,6 @@ impl SmsService {
                 activity: runtime_activity.iter().cloned().collect(),
                 provider_balance_cache: runtime_balances.values().cloned().collect(),
                 reuse_pool: reuse_pool.clone(),
-                openai_sms_regions_cache: openai_sms_regions_cache.clone(),
                 ticket_stats_events: ticket_stats_events.clone(),
                 stats_sync_status: stats_sync_status.clone(),
             });
@@ -484,7 +444,6 @@ impl SmsService {
             provider_raw_option_audit: RwLock::new(provider_raw_option_audit),
             provider_balance_cache: RwLock::new(runtime_balances),
             reuse_pool: RwLock::new(reuse_pool),
-            openai_sms_regions_cache: RwLock::new(openai_sms_regions_cache),
             ticket_stats_events: RwLock::new(ticket_stats_events.into()),
             stats_sync_status: RwLock::new(stats_sync_status),
             callback_subscriptions: RwLock::new(BTreeMap::new()),
@@ -683,25 +642,6 @@ impl SmsService {
             .ensure_settings_persisted(&self.runtime_settings());
     }
 
-    pub fn openai_sms_regions_cache(&self) -> OpenAiSmsRegionsCache {
-        self.openai_sms_regions_cache.read().clone()
-    }
-
-    pub fn openai_sms_region_codes(&self) -> Vec<String> {
-        self.openai_sms_regions_cache().sms_regions
-    }
-
-    pub async fn get_openai_sms_regions_cache(&self) -> OpenAiSmsRegionsCache {
-        if self.should_refresh_openai_sms_regions() {
-            let _ = self.refresh_openai_sms_regions_cache().await;
-        }
-        self.openai_sms_regions_cache()
-    }
-
-    pub async fn get_openai_sms_region_codes(&self) -> Vec<String> {
-        self.get_openai_sms_regions_cache().await.sms_regions
-    }
-
     pub fn registry(&self) -> Arc<RwLock<ProviderRegistry>> {
         Arc::clone(&self.registry)
     }
@@ -831,9 +771,6 @@ impl SmsService {
         if source.batch.provider_balance.is_some() {
             target.batch.provider_balance = source.batch.provider_balance;
         }
-        if source.batch.openai_regions.is_some() {
-            target.batch.openai_regions = source.batch.openai_regions;
-        }
         target.batch.clear_logs |= source.batch.clear_logs;
     }
 
@@ -938,93 +875,6 @@ impl SmsService {
                 level, title, detail, provider, service, country, plan, item, round, ticket_id,
             ),
         );
-    }
-
-    fn should_refresh_openai_sms_regions(&self) -> bool {
-        let cache = self.openai_sms_regions_cache.read();
-        match cache.fetched_at {
-            Some(fetched_at) => {
-                Utc::now() - fetched_at >= Duration::hours(OPENAI_SMS_REGIONS_CACHE_TTL_HOURS)
-            }
-            None => true,
-        }
-    }
-
-    async fn fetch_openai_sms_regions_payload(&self) -> Result<OpenAiSmsRegionsPayload, SmsError> {
-        let html = self
-            .callback_client
-            .get(OPENAI_AUTH_BOOTSTRAP_URL)
-            .send()
-            .await
-            .map_err(|err| {
-                SmsError::Upstream(format!("fetch openai auth bootstrap failed: {err}"))
-            })?
-            .text()
-            .await
-            .map_err(|err| {
-                SmsError::Upstream(format!("read openai auth bootstrap failed: {err}"))
-            })?;
-        let bootstrap_json = extract_bootstrap_json(&html).ok_or_else(|| {
-            SmsError::Upstream("openai auth bootstrap payload not found".to_string())
-        })?;
-        let page: OpenAiBootstrapPage = serde_json::from_str(&bootstrap_json).map_err(|err| {
-            SmsError::Config(format!("parse openai bootstrap page failed: {err}"))
-        })?;
-        let statsig: OpenAiStatsigBootstrap =
-            serde_json::from_str(&page.statsig_client_init_data.bootstrap).map_err(|err| {
-                SmsError::Config(format!("parse openai statsig bootstrap failed: {err}"))
-            })?;
-        let config_id = statsig_config_id(OPENAI_SMS_DYNAMIC_CONFIG_KEY);
-        statsig
-            .dynamic_configs
-            .get(&config_id)
-            .map(|entry| OpenAiSmsRegionsPayload {
-                sms: normalize_region_codes(&entry.value.sms),
-                whatsapp: normalize_region_codes(&entry.value.whatsapp),
-            })
-            .ok_or_else(|| {
-                SmsError::Upstream(format!(
-                    "openai statsig config `{OPENAI_SMS_DYNAMIC_CONFIG_KEY}` missing"
-                ))
-            })
-    }
-
-    pub async fn refresh_openai_sms_regions_cache(
-        &self,
-    ) -> Result<OpenAiSmsRegionsCache, SmsError> {
-        let payload = self.fetch_openai_sms_regions_payload().await?;
-        let sms_regions = payload.sms;
-        let whatsapp_regions = payload.whatsapp;
-        let sms_only_regions = sms_regions
-            .iter()
-            .filter(|code| !whatsapp_regions.contains(*code))
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut all_regions = sms_regions.clone();
-        for code in &whatsapp_regions {
-            if !all_regions.contains(code) {
-                all_regions.push(code.clone());
-            }
-        }
-        all_regions.sort();
-        let next = OpenAiSmsRegionsCache {
-            sms_regions,
-            sms_only_regions,
-            whatsapp_regions,
-            all_regions,
-            fetched_at: Some(Utc::now()),
-        };
-        *self.openai_sms_regions_cache.write() = next.clone();
-        let mut uow = RuntimeUnitOfWork::default();
-        uow.batch.openai_regions = Some(next.clone());
-        self.log_into_uow(
-            &mut uow,
-            "config",
-            "info",
-            "openai sms region cache refreshed",
-        );
-        self.commit_runtime_uow(uow);
-        Ok(next)
     }
 
     fn peek_exact_reuse_from_pool(
@@ -3955,7 +3805,6 @@ impl SmsService {
             next.option_cache_enabled = update.option_cache_enabled;
             next.option_cache_poll_interval_minutes =
                 update.option_cache_poll_interval_minutes.max(1);
-            next.only_show_openai_sms_countries = update.only_show_openai_sms_countries;
             next.check_updates_on_launch = update.check_updates_on_launch;
             next.http_port = update.http_port.max(1);
             next.stats_sync_enabled = update.stats_sync_enabled;
@@ -4794,35 +4643,6 @@ fn generate_runtime_secret() -> String {
     Uuid::now_v7().simple().to_string()
 }
 
-fn extract_bootstrap_json(html: &str) -> Option<String> {
-    let marker = "<script id=\"bootstrap-inert-script\" type=\"application/json\">";
-    let start = html.find(marker)? + marker.len();
-    let end = html[start..].find("</script>")? + start;
-    Some(html[start..end].trim().to_string())
-}
-
-fn statsig_config_id(key: &str) -> String {
-    let mut hash: i32 = 0;
-    for byte in key.bytes() {
-        hash = ((hash << 5).wrapping_sub(hash)).wrapping_add(byte as i32);
-    }
-    (hash as u32).to_string()
-}
-
-fn normalize_region_codes(values: &[String]) -> Vec<String> {
-    let mut deduped = Vec::new();
-    for value in values {
-        let normalized = value.trim().to_ascii_uppercase();
-        if normalized.len() == 2
-            && normalized.chars().all(|char| char.is_ascii_alphabetic())
-            && !deduped.contains(&normalized)
-        {
-            deduped.push(normalized);
-        }
-    }
-    deduped
-}
-
 fn normalize_runtime_ticket(mut ticket: TicketRecord) -> (TicketRecord, bool) {
     let canonical_service = canonical_service_key(&ticket.service, Some(&ticket.service));
     let canonical_country = canonical_country_key(&ticket.country, Some(&ticket.country), None);
@@ -5113,7 +4933,6 @@ mod tests {
             auto_fallback: true,
             option_cache_enabled: true,
             option_cache_poll_interval_minutes: 30,
-            only_show_openai_sms_countries: false,
             check_updates_on_launch: true,
             http_port: 7822,
             http_secret: "secret-token".to_string(),
@@ -5122,29 +4941,6 @@ mod tests {
             stats_sync_base_url: "https://custom.example.workers.dev/proxy".to_string(),
             stats_sync_api_token: "custom-token".to_string(),
         }
-    }
-
-    #[test]
-    fn statsig_config_id_matches_openai_sms_region_key() {
-        assert_eq!(
-            statsig_config_id("phone-verification-sms-regions-by-verification-channel"),
-            "2516824722"
-        );
-    }
-
-    #[test]
-    fn extract_bootstrap_json_reads_embedded_script_payload() {
-        let html = r#"
-        <html>
-          <body>
-            <script id="bootstrap-inert-script" type="application/json">
-              {"statsigClientInitData":{"bootstrap":"{\"dynamic_configs\":{}}"}}
-            </script>
-          </body>
-        </html>
-        "#;
-        let payload = extract_bootstrap_json(html).unwrap();
-        assert!(payload.contains("statsigClientInitData"));
     }
 
     #[test]
@@ -5160,7 +4956,6 @@ mod tests {
             auto_fallback: false,
             option_cache_enabled: false,
             option_cache_poll_interval_minutes: 5,
-            only_show_openai_sms_countries: true,
             check_updates_on_launch: false,
             http_port: 9900,
             http_secret: "secret-token".to_string(),
@@ -5547,7 +5342,6 @@ mod tests {
             auto_fallback: false,
             option_cache_enabled: false,
             option_cache_poll_interval_minutes: 7,
-            only_show_openai_sms_countries: true,
             check_updates_on_launch: false,
             http_port: 9001,
             stats_sync_enabled: before.stats_sync_enabled,
@@ -5559,10 +5353,6 @@ mod tests {
         let after = service.runtime_settings();
         assert_eq!(after.http_port, before.http_port);
         assert_eq!(after.option_cache_enabled, before.option_cache_enabled);
-        assert_eq!(
-            after.only_show_openai_sms_countries,
-            before.only_show_openai_sms_countries
-        );
     }
 
     #[test]
@@ -7351,7 +7141,6 @@ codes = ["123456"]
                 auto_fallback: true,
                 option_cache_enabled: true,
                 option_cache_poll_interval_minutes: 30,
-                only_show_openai_sms_countries: false,
                 check_updates_on_launch: true,
                 http_port: 7822,
                 stats_sync_enabled: true,
@@ -7490,7 +7279,6 @@ codes = ["123456"]
                 auto_fallback: true,
                 option_cache_enabled: true,
                 option_cache_poll_interval_minutes: 30,
-                only_show_openai_sms_countries: false,
                 check_updates_on_launch: true,
                 http_port: 7822,
                 stats_sync_enabled: true,
@@ -7593,7 +7381,6 @@ codes = ["123456"]
                 auto_fallback: true,
                 option_cache_enabled: true,
                 option_cache_poll_interval_minutes: 30,
-                only_show_openai_sms_countries: false,
                 check_updates_on_launch: true,
                 http_port: 7822,
                 stats_sync_enabled: true,
@@ -7632,7 +7419,6 @@ codes = ["123456"]
                 auto_fallback: true,
                 option_cache_enabled: true,
                 option_cache_poll_interval_minutes: 30,
-                only_show_openai_sms_countries: false,
                 check_updates_on_launch: true,
                 http_port: 7822,
                 stats_sync_enabled: true,

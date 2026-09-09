@@ -93,7 +93,6 @@ Persisted per-instance settings:
 | `auto_fallback` | `true` |
 | `option_cache_enabled` | `true` |
 | `option_cache_poll_interval_minutes` | `30` |
-| `only_show_openai_sms_countries` | `false` |
 | `check_updates_on_launch` | `true` |
 | `http_port` | `7822` |
 | `http_secret` | UUID v7 (auto-generated) |

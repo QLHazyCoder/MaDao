@@ -1,11 +1,10 @@
 import type {
   LanguageCode,
-  OpenAiSmsRegionsCache,
   OptionCatalog,
   OptionCatalogItem,
   OptionItem,
-  PricePanelMap,
   ProviderPriceItem,
+  PricePanelMap,
   ProviderDynamicOptions,
 } from './types';
 import { i18n } from './i18n';
@@ -184,71 +183,46 @@ export function filterCatalogItems(items: OptionCatalogItem[], providerId: strin
   return items.filter((item) => item.providers.includes(providerId));
 }
 
-export function isOpenAiService(service: string | null | undefined) {
-  return service === 'openai';
-}
+/**
+ * Builds one provider-scoped country list. The provider's country endpoint is
+ * the baseline; a live price response can promote and add countries it offers.
+ */
+export function buildProviderCountryOptions(
+  countries: OptionCatalogItem[],
+  providerId: string,
+  offeredItems: ProviderPriceItem[] = [],
+): OptionItem[] {
+  const offeredCountries = new Set(
+    offeredItems.map((item) => canonicalCountryValue(item.country)).filter(Boolean),
+  );
+  const catalogItems = filterCatalogItems(countries, providerId);
+  const catalogCountries = new Set(catalogItems.map((item) => canonicalCountryValue(item.value)));
+  const catalogOptions = [...catalogItems]
+    .sort((left, right) => Number(offeredCountries.has(canonicalCountryValue(right.value)))
+      - Number(offeredCountries.has(canonicalCountryValue(left.value))))
+    .map((item) => {
+      const iconUrl = item.provider_icon_urls?.[providerId] ?? item.icon_url;
+      return {
+        value: item.value,
+        label: item.label,
+        hint: item.hint,
+        label_zh: item.label_zh,
+        provider_value: item.provider_values[providerId]
+          ?? item.provider_values[item.providers[0]]
+          ?? item.value,
+        icon_url: iconUrl,
+        provider_icon_url: iconUrl,
+      };
+    });
+  const offerOnlyOptions = offeredItems
+    .filter((item) => !catalogCountries.has(canonicalCountryValue(item.country)))
+    .map((item) => ({
+      value: item.country,
+      label: item.display_name,
+      hint: '',
+      label_zh: item.display_name_zh,
+      provider_value: item.provider_country ?? item.country,
+    }));
 
-function resolveIsoCountryDisplayName(code: string) {
-  const normalized = code.trim().toUpperCase();
-  if (!normalized || normalized.length !== 2) return null;
-  try {
-    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
-    return displayNames.of(normalized) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export function buildOpenAiSmsCountryCanonicalSet(cache: OpenAiSmsRegionsCache) {
-  const canonical = new Set<string>();
-  cache.sms_regions.forEach((code) => {
-    const displayName = resolveIsoCountryDisplayName(code);
-    canonical.add(canonicalCountryValue(code));
-    if (displayName) {
-      canonical.add(canonicalCountryValue(displayName));
-    }
-  });
-  return canonical;
-}
-
-export function buildOpenAiWhatsappOnlyCountryCanonicalSet(cache: OpenAiSmsRegionsCache) {
-  const smsAllowed = buildOpenAiSmsCountryCanonicalSet(cache);
-  const blocked = new Set<string>();
-  cache.whatsapp_regions.forEach((code) => {
-    const displayName = resolveIsoCountryDisplayName(code);
-    const canonicalFromCode = canonicalCountryValue(code);
-    const canonicalFromName = displayName ? canonicalCountryValue(displayName) : null;
-    const explicitlySmsEnabled = smsAllowed.has(canonicalFromCode)
-      || (canonicalFromName ? smsAllowed.has(canonicalFromName) : false);
-    if (explicitlySmsEnabled) return;
-    blocked.add(canonicalFromCode);
-    if (canonicalFromName) {
-      blocked.add(canonicalFromName);
-    }
-  });
-  return blocked;
-}
-
-export function filterCountriesByOpenAiSmsAvailability(
-  items: OptionCatalogItem[],
-  cache: OpenAiSmsRegionsCache,
-  enabled: boolean,
-  service?: string | null,
-) {
-  if (!enabled || !isOpenAiService(service)) return items;
-  const blocked = buildOpenAiWhatsappOnlyCountryCanonicalSet(cache);
-  if (blocked.size === 0) return items;
-  return items.filter((item) => !blocked.has(canonicalCountryValue(item.value || item.label)));
-}
-
-export function filterPriceItemsByOpenAiSmsAvailability(
-  items: ProviderPriceItem[],
-  cache: OpenAiSmsRegionsCache,
-  enabled: boolean,
-  service?: string | null,
-) {
-  if (!enabled || !isOpenAiService(service)) return items;
-  const blocked = buildOpenAiWhatsappOnlyCountryCanonicalSet(cache);
-  if (blocked.size === 0) return items;
-  return items.filter((item) => !blocked.has(canonicalCountryValue(item.country || item.display_name)));
+  return normalizeCountryOptions([...catalogOptions, ...offerOnlyOptions]);
 }

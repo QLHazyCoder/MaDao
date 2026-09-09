@@ -78,9 +78,8 @@ import {
 } from './lib/formatters';
 import {
   buildOptionCatalog,
-  filterCountriesByOpenAiSmsAvailability,
+  buildProviderCountryOptions,
   filterCatalogItems,
-  filterPriceItemsByOpenAiSmsAvailability,
   formatOperatorLabel,
   operatorCountryCacheKey,
 } from './app/utils';
@@ -227,8 +226,6 @@ export function App() {
     setNotifications,
     runtimeSettings,
     setRuntimeSettings,
-    openAiSmsRegions,
-    setOpenAiSmsRegions,
     optionCacheOverview,
     setOptionCacheOverview,
     providerOptions,
@@ -465,8 +462,6 @@ export function App() {
       setNotifications,
       runtimeSettings,
       setRuntimeSettings,
-      openAiSmsRegions,
-      setOpenAiSmsRegions,
       optionCacheOverview,
       setOptionCacheOverview,
       providerOptions,
@@ -534,35 +529,12 @@ export function App() {
     [providerOptions, pricePanels],
   );
   const selectedStoreCountryItems = useMemo(
-    () => filterCountriesByOpenAiSmsAvailability(
-      filterCatalogItems(optionCatalog.countries, selectedProvider),
-      openAiSmsRegions,
-      runtimeSettings.only_show_openai_sms_countries,
-      selectedStoreQuery.service || selectedManifest?.defaults.service,
-    ),
-    [
-      openAiSmsRegions,
-      optionCatalog.countries,
-      runtimeSettings.only_show_openai_sms_countries,
-      selectedManifest?.defaults.service,
-      selectedProvider,
-      selectedStoreQuery.service,
-    ],
+    () => filterCatalogItems(optionCatalog.countries, selectedProvider),
+    [optionCatalog.countries, selectedProvider],
   );
   const activationCountryItems = useMemo(
-    () => filterCountriesByOpenAiSmsAvailability(
-      filterCatalogItems(optionCatalog.countries, activationForm.provider),
-      openAiSmsRegions,
-      runtimeSettings.only_show_openai_sms_countries,
-      activationForm.service,
-    ),
-    [
-      activationForm.provider,
-      activationForm.service,
-      openAiSmsRegions,
-      optionCatalog.countries,
-      runtimeSettings.only_show_openai_sms_countries,
-    ],
+    () => filterCatalogItems(optionCatalog.countries, activationForm.provider),
+    [activationForm.provider, optionCatalog.countries],
   );
   const manifestsById = manifests;
 
@@ -585,8 +557,6 @@ export function App() {
       visibleProviders,
       providerOptions,
       optionCatalog,
-      openAiSmsRegions,
-      onlyShowOpenAiSmsCountries: runtimeSettings.only_show_openai_sms_countries,
       setProviderOptions,
       updateManifestField,
       updateStoreQuery,
@@ -1270,7 +1240,6 @@ export function App() {
     auto_fallback: typeof runtimeSettings.auto_fallback;
     option_cache_enabled: typeof runtimeSettings.option_cache_enabled;
     option_cache_poll_interval_minutes: typeof runtimeSettings.option_cache_poll_interval_minutes;
-    only_show_openai_sms_countries: typeof runtimeSettings.only_show_openai_sms_countries;
     check_updates_on_launch: typeof runtimeSettings.check_updates_on_launch;
     http_port: typeof runtimeSettings.http_port;
     stats_sync_enabled: typeof runtimeSettings.stats_sync_enabled;
@@ -1282,7 +1251,6 @@ export function App() {
       auto_fallback: runtimeSettings.auto_fallback,
       option_cache_enabled: runtimeSettings.option_cache_enabled,
       option_cache_poll_interval_minutes: runtimeSettings.option_cache_poll_interval_minutes,
-      only_show_openai_sms_countries: runtimeSettings.only_show_openai_sms_countries,
       check_updates_on_launch: runtimeSettings.check_updates_on_launch,
       http_port: runtimeSettings.http_port,
       stats_sync_enabled: runtimeSettings.stats_sync_enabled,
@@ -1644,14 +1612,7 @@ export function App() {
         country: routingItemEditor.country.trim() ? routingItemEditor.country : undefined,
         operator: routingItemEditor.operator || undefined,
       });
-      setRoutingItemPriceOptions(
-        filterPriceItemsByOpenAiSmsAvailability(
-          prices.items,
-          openAiSmsRegions,
-          runtimeSettings.only_show_openai_sms_countries,
-          service,
-        ),
-      );
+      setRoutingItemPriceOptions(prices.items);
       pushStatusMessage(translate('loaded_prices_for_provider', { provider: routingItemEditor.providerId }));
     } catch (error) {
       pushStatusMessage(translate('failed_load_prices_for_provider', { provider: routingItemEditor.providerId, error: formatError(error) }));
@@ -1681,6 +1642,22 @@ export function App() {
         maxPrice: nextValue,
       };
     });
+  }
+
+  function routingCountrySelectorOptions(
+    providerId: string,
+    offeredItems: ProviderPriceItem[] = [],
+  ) {
+    return dedupeSelectorOptions(buildProviderCountryOptions(
+      optionCatalog.countries,
+      providerId,
+      offeredItems,
+    ).map((option) => selectorOptionFromOptionItem({
+      option,
+      language,
+      resourceKind: 'country',
+      providerId,
+    })));
   }
 
   async function openRoutingItemSelector(
@@ -1722,6 +1699,7 @@ export function App() {
         kind: 'routing-item-country',
         title: t('Select Candidate Country'),
         resourceKind: 'country',
+        providerId,
         options: dedupeSelectorOptions([
           selectorOptionFromOptionItem({
             option: anyRouteCountryOption,
@@ -1732,19 +1710,36 @@ export function App() {
             isSynthetic: true,
             syntheticKind: 'any_country',
           }),
-          ...filterCountriesByOpenAiSmsAvailability(
-            filterCatalogItems(optionCatalog.countries, providerId),
-            openAiSmsRegions,
-            runtimeSettings.only_show_openai_sms_countries,
-            plan.service,
-          ).map((option) => selectorOptionFromCatalogItem({
-            item: option,
-            language,
-            resourceKind: 'country',
-            providerId,
-          })),
+          ...routingCountrySelectorOptions(providerId),
         ]),
       });
+      if (providerId !== ANY_PROVIDER_VALUE && plan.service.trim()) {
+        queueMicrotask(() => {
+          void fetchProviderPrices(providerId, plan.service)
+            .then((response) => {
+              setSelectorState((current) => current?.kind === 'routing-item-country' && current.providerId === providerId
+                ? {
+                  ...current,
+                  options: dedupeSelectorOptions([
+                    selectorOptionFromOptionItem({
+                      option: anyRouteCountryOption,
+                      language,
+                      resourceKind: 'country',
+                      source: 'synthetic',
+                      scope: 'single_provider',
+                      isSynthetic: true,
+                      syntheticKind: 'any_country',
+                    }),
+                    ...routingCountrySelectorOptions(providerId, response.items),
+                  ]),
+                }
+                : current);
+            })
+            .catch(() => {
+              // Keep the provider's declared country catalog when a live offer query fails.
+            });
+        });
+      }
       return;
     }
 
@@ -1819,14 +1814,8 @@ export function App() {
         void fetchProviderPrices(providerId, priceService, {
           country: operatorCountry.trim() ? operatorCountry : undefined,
         }).then((priceResponse) => {
-          const filteredPriceItems = filterPriceItemsByOpenAiSmsAvailability(
-            priceResponse.items,
-            openAiSmsRegions,
-            runtimeSettings.only_show_openai_sms_countries,
-            priceService,
-          );
           const priceDerivedOperatorOptions = dedupeSelectorOptions(
-            filteredPriceItems
+            priceResponse.items
               .filter((entry) => {
                 const value = entry.operator.trim().toLowerCase();
                 return value !== '' && value !== 'any' && value !== 'default';
@@ -2608,7 +2597,6 @@ export function App() {
                 optionCacheEnabled={runtimeSettings.option_cache_enabled}
                 optionCachePollIntervalMinutes={runtimeSettings.option_cache_poll_interval_minutes}
                 optionCacheOverview={optionCacheOverview}
-                onlyShowOpenAiSmsCountries={runtimeSettings.only_show_openai_sms_countries}
                 checkUpdatesOnLaunch={runtimeSettings.check_updates_on_launch}
                 updateCheckBusy={updateCheckBusy}
                 updateInstallBusy={updateInstallBusy}
@@ -2630,10 +2618,6 @@ export function App() {
                 onOptionCachePollIntervalChange={(minutes) =>
                   void updateRuntimeSettings(buildRuntimeSettingsUpdate({
                     option_cache_poll_interval_minutes: minutes,
-                  }))}
-                onOnlyShowOpenAiSmsCountriesChange={(enabled) =>
-                  void updateRuntimeSettings(buildRuntimeSettingsUpdate({
-                    only_show_openai_sms_countries: enabled,
                   }))}
                 onCheckUpdatesOnLaunchChange={(enabled) =>
                   void updateRuntimeSettings(buildRuntimeSettingsUpdate({

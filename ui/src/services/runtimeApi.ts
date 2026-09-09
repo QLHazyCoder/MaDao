@@ -1,7 +1,6 @@
 import type {
   MessageFilter,
   NotificationFeed,
-  OpenAiSmsRegionsCache,
   OptionListResponse,
   OptionCacheOverview,
   ProviderBalance,
@@ -42,7 +41,6 @@ import {
   deleteRoutingPlanViaSocket,
   failoverRoutingTicketViaSocket,
   fetchNotificationsViaSocket,
-  fetchOpenAiSmsRegionsViaSocket,
   fetchOptionCacheOverviewViaSocket,
   fetchProviderBalanceViaSocket,
   fetchProviderCountriesViaSocket,
@@ -265,13 +263,6 @@ export async function saveRuntimeSettings(next: RuntimeSettingsUpdate): Promise<
     method: 'POST',
     headers: IS_DESKTOP_RUNTIME ? await buildDesktopHttpHeaders() : { 'Content-Type': 'application/json' },
     body: JSON.stringify(next),
-  }));
-}
-
-export async function fetchOpenAiSmsRegions(): Promise<OpenAiSmsRegionsCache> {
-  if (USE_SOCKET_TRANSPORT) return fetchOpenAiSmsRegionsViaSocket();
-  return readJson<OpenAiSmsRegionsCache>(await fetch(`${API_BASE}/api/settings/openai-sms-regions`, {
-    headers: IS_DESKTOP_RUNTIME ? await buildDesktopHttpHeaders(false) : undefined,
   }));
 }
 

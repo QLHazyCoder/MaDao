@@ -1,7 +1,7 @@
 use crate::error::SmsError;
 use crate::models::{
-    ActivityEntry, LogEntry, OpenAiSmsRegionsCache, ProviderBalanceCacheEntry, ReleaseAction,
-    ReusePoolEntry, RuntimeStateStore, StatsSyncStatus, TicketRecord, TicketStatsEvent,
+    ActivityEntry, LogEntry, ProviderBalanceCacheEntry, ReleaseAction, ReusePoolEntry,
+    RuntimeStateStore, StatsSyncStatus, TicketRecord, TicketStatsEvent,
 };
 use chrono::{DateTime, Utc};
 use parking_lot::Mutex;
@@ -11,7 +11,7 @@ use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-const RUNTIME_DB_SCHEMA_VERSION: i64 = 3;
+const RUNTIME_DB_SCHEMA_VERSION: i64 = 4;
 const RELEASE_OWNER_KEY: &str = "release_owner";
 
 #[derive(Debug, Clone)]
@@ -47,7 +47,6 @@ pub struct RuntimeStoreBatch {
     pub stats_sync_status: Option<StatsSyncStatus>,
     pub reuse_bucket: Option<(String, Vec<ReusePoolEntry>)>,
     pub provider_balance: Option<ProviderBalanceCacheEntry>,
-    pub openai_regions: Option<OpenAiSmsRegionsCache>,
     pub clear_logs: bool,
 }
 
@@ -63,7 +62,6 @@ impl RuntimeStoreBatch {
             && self.stats_sync_status.is_none()
             && self.reuse_bucket.is_none()
             && self.provider_balance.is_none()
-            && self.openai_regions.is_none()
             && !self.clear_logs
     }
 }
@@ -186,7 +184,6 @@ impl RuntimeStore {
         let ticket_stats_events = self.load_ticket_stats_events(&conn)?;
         let provider_balance_cache = self.load_provider_balances(&conn)?;
         let reuse_pool = self.load_reuse_pool(&conn)?;
-        let openai_sms_regions_cache = self.load_openai_regions(&conn)?;
         let stats_sync_status = self.load_stats_sync_status(&conn)?;
         Ok(RuntimeStateStore {
             tickets,
@@ -194,7 +191,6 @@ impl RuntimeStore {
             activity,
             provider_balance_cache,
             reuse_pool,
-            openai_sms_regions_cache,
             ticket_stats_events,
             stats_sync_status,
         })
@@ -571,6 +567,9 @@ impl RuntimeStore {
         if current_version < 3 {
             self.migrate_v2_to_v3(conn)?;
         }
+        if current_version < 4 {
+            self.migrate_v3_to_v4(conn)?;
+        }
         Ok(())
     }
 
@@ -648,6 +647,15 @@ impl RuntimeStore {
     fn migrate_v2_to_v3(&self, conn: &Connection) -> Result<(), SmsError> {
         add_column_if_missing(conn, "ticket_stats_events", "price", "REAL")?;
         add_column_if_missing(conn, "ticket_stats_events", "receive_duration_secs", "REAL")?;
+        Ok(())
+    }
+
+    fn migrate_v3_to_v4(&self, conn: &Connection) -> Result<(), SmsError> {
+        conn.execute(
+            "DELETE FROM runtime_meta WHERE key = 'openai_sms_regions_cache'",
+            [],
+        )
+        .map_err(|err| SmsError::Io(format!("remove legacy openai regions failed: {err}")))?;
         Ok(())
     }
 
@@ -780,24 +788,6 @@ impl RuntimeStore {
                 .push(entry);
         }
         Ok(reuse_pool)
-    }
-
-    fn load_openai_regions(&self, conn: &Connection) -> Result<OpenAiSmsRegionsCache, SmsError> {
-        let payload: Option<String> = conn
-            .query_row(
-                "SELECT value_json FROM runtime_meta WHERE key = 'openai_sms_regions_cache'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|err| SmsError::Io(format!("read openai regions failed: {err}")))?;
-        payload
-            .map(|value| {
-                serde_json::from_str::<OpenAiSmsRegionsCache>(&value)
-                    .map_err(|err| SmsError::Config(format!("parse openai regions failed: {err}")))
-            })
-            .transpose()
-            .map(|value| value.unwrap_or_default())
     }
 
     fn load_stats_sync_status(&self, conn: &Connection) -> Result<StatsSyncStatus, SmsError> {
@@ -1253,24 +1243,6 @@ fn insert_reuse_bucket(
     Ok(())
 }
 
-fn save_openai_regions_tx(
-    tx: &Transaction<'_>,
-    cache: &OpenAiSmsRegionsCache,
-) -> Result<(), SmsError> {
-    let payload = serde_json::to_string(cache)
-        .map_err(|err| SmsError::Config(format!("serialize openai regions failed: {err}")))?;
-    tx.execute(
-        "INSERT INTO runtime_meta (key, value_json, updated_at)
-             VALUES ('openai_sms_regions_cache', ?1, ?2)
-             ON CONFLICT(key) DO UPDATE SET
-               value_json = excluded.value_json,
-               updated_at = excluded.updated_at",
-        params![payload, Utc::now().to_rfc3339()],
-    )
-    .map_err(|err| SmsError::Io(format!("save openai regions failed: {err}")))?;
-    Ok(())
-}
-
 fn save_stats_sync_status_tx(
     tx: &Transaction<'_>,
     status: &StatsSyncStatus,
@@ -1360,9 +1332,6 @@ impl RuntimeStoreTx<'_, '_> {
                     .retain(|entry| entry.provider != balance.provider);
                 state.provider_balance_cache.push(balance.clone());
             }
-            if let Some(cache) = batch.openai_regions.as_ref() {
-                state.openai_sms_regions_cache = cache.clone();
-            }
             return Ok(());
         }
         if batch.clear_logs {
@@ -1413,9 +1382,6 @@ impl RuntimeStoreTx<'_, '_> {
         if let Some(balance) = batch.provider_balance.as_ref() {
             self.upsert_provider_balance(balance)?;
         }
-        if let Some(cache) = batch.openai_regions.as_ref() {
-            self.save_openai_regions(cache)?;
-        }
         Ok(())
     }
 
@@ -1432,7 +1398,7 @@ impl RuntimeStoreTx<'_, '_> {
                  DELETE FROM ticket_stats_events;
                  DELETE FROM provider_balance_cache;
                  DELETE FROM reuse_pool;
-                 DELETE FROM runtime_meta WHERE key IN ('openai_sms_regions_cache', 'stats_sync_status');",
+                 DELETE FROM runtime_meta WHERE key = 'stats_sync_status';",
             )
             .map_err(|err| SmsError::Io(format!("clear sqlite runtime state failed: {err}")))?;
         insert_tickets(&self.tx, &state.tickets)?;
@@ -1441,7 +1407,6 @@ impl RuntimeStoreTx<'_, '_> {
         insert_ticket_stats_events(&self.tx, &state.ticket_stats_events)?;
         insert_provider_balances(&self.tx, &state.provider_balance_cache)?;
         insert_reuse_pool(&self.tx, &state.reuse_pool)?;
-        save_openai_regions_tx(&self.tx, &state.openai_sms_regions_cache)?;
         save_stats_sync_status_tx(&self.tx, &state.stats_sync_status)?;
         Ok(())
     }
@@ -1579,13 +1544,6 @@ impl RuntimeStoreTx<'_, '_> {
             )
             .map_err(|err| SmsError::Io(format!("clear reuse bucket failed: {err}")))?;
         insert_reuse_bucket(&self.tx, provider_bucket, entries)
-    }
-
-    fn save_openai_regions(&mut self, cache: &OpenAiSmsRegionsCache) -> Result<(), SmsError> {
-        let RuntimeStoreBackend::Sqlite { .. } = self.backend else {
-            return Ok(());
-        };
-        save_openai_regions_tx(&self.tx, cache)
     }
 }
 
@@ -1745,5 +1703,54 @@ fn encode_activity_kind(kind: &crate::models::ActivityKind) -> &'static str {
         crate::models::ActivityKind::TicketEvent => "ticket_event",
         crate::models::ActivityKind::RoutingEvent => "routing_event",
         crate::models::ActivityKind::ReleaseEvent => "release_event",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migration_removes_the_retired_openai_regions_cache() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("runtime.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE runtime_meta (
+              key TEXT PRIMARY KEY,
+              value_json TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            INSERT INTO runtime_meta (key, value_json, updated_at)
+              VALUES ('schema_version', '3', '2026-09-09T00:00:00Z');
+            INSERT INTO runtime_meta (key, value_json, updated_at)
+              VALUES ('openai_sms_regions_cache', '{\"fetched_at\":\"2026-06-01T00:00:00Z\"}', '2026-06-01T00:00:00Z');
+            ",
+        )
+        .unwrap();
+        drop(conn);
+
+        RuntimeStore::open(&path).unwrap();
+
+        let conn = Connection::open(path).unwrap();
+        let cache: Option<String> = conn
+            .query_row(
+                "SELECT value_json FROM runtime_meta WHERE key = 'openai_sms_regions_cache'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .unwrap();
+        let schema_version: String = conn
+            .query_row(
+                "SELECT value_json FROM runtime_meta WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert!(cache.is_none());
+        assert_eq!(schema_version, RUNTIME_DB_SCHEMA_VERSION.to_string());
     }
 }

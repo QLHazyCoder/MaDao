@@ -9,18 +9,18 @@ use serde::Serialize;
 use sms_core::config::ServerConfig;
 use sms_core::models::{
     AcquireCodeRequest, HttpAuthLoginRequest, HttpAuthStatus, NotificationFeed,
-    OpenAiSmsRegionsCache, OptionCacheOverview, PollCodeRequest, ProviderManifestList,
-    ProviderOperatorsQuery, ProviderPriceQuery, ProviderReorderRequest, ProviderServicesQuery,
-    ReleaseCodeRequest, RemoteStatsSummaryQuery, RemoteStatsSummaryResponse,
-    ReusePoolClearResponse, RoutingFailoverRequest, RoutingPlan, RoutingPlanList,
-    RoutingReplaceRequest, RuntimeAccessInfo, RuntimeSettings, RuntimeSettingsUpdate,
-    RuntimeSnapshot, StatsSyncResult, TicketCallbackRegistrationRequest, TicketListResponse,
+    OptionCacheOverview, PollCodeRequest, ProviderManifestList, ProviderOperatorsQuery,
+    ProviderPriceQuery, ProviderReorderRequest, ProviderServicesQuery, ReleaseCodeRequest,
+    RemoteStatsSummaryQuery, RemoteStatsSummaryResponse, ReusePoolClearResponse,
+    RoutingFailoverRequest, RoutingPlan, RoutingPlanList, RoutingReplaceRequest, RuntimeAccessInfo,
+    RuntimeSettings, RuntimeSettingsUpdate, RuntimeSnapshot, StatsSyncResult,
+    TicketCallbackRegistrationRequest, TicketListResponse,
 };
 use sms_core::service::SmsService;
 #[cfg(unix)]
 use sms_core::socket_api::SocketCommand;
 use std::net::SocketAddr;
-use std::path::Path as FsPath;
+use std::path::{Path as FsPath, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(unix)]
@@ -37,6 +37,7 @@ pub struct ApiState {
     pub http_secret: Option<String>,
     pub sessions: Arc<RwLock<Vec<String>>>,
     pub session_counter: Arc<AtomicU64>,
+    pub session_store_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Serialize)]
@@ -138,9 +139,6 @@ async fn handle_socket_command(service: &SmsService, line: &str) -> String {
             SocketCommand::RemoteStatsSummary { query } => {
                 wrap_socket_result(service.fetch_remote_stats_summary(query).await)
             }
-            SocketCommand::OpenAiSmsRegions => {
-                wrap_socket_result(Ok(service.get_openai_sms_regions_cache().await))
-            }
             SocketCommand::OptionCacheOverview => {
                 wrap_socket_plain_result(Ok(service.option_cache_overview()))
             }
@@ -207,9 +205,33 @@ fn extract_session_id(headers: &HeaderMap) -> Option<String> {
 
 fn build_session_cookie(session_id: &str) -> HeaderValue {
     HeaderValue::from_str(&format!(
-        "{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Lax"
+        "{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000"
     ))
     .expect("valid session cookie")
+}
+
+fn load_persisted_sessions(path: &Path) -> Vec<String> {
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(_) => return Vec::new(),
+    };
+    serde_json::from_str(&content).unwrap_or_default()
+}
+
+fn persist_sessions(path: &Path, sessions: &[String]) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(content) = serde_json::to_string_pretty(sessions) {
+        let _ = std::fs::write(path, content);
+    }
+}
+
+fn persist_session_for_state(state: &ApiState) {
+    if let Some(ref path) = state.session_store_path {
+        let sessions = state.sessions.read().clone();
+        persist_sessions(path, &sessions);
+    }
 }
 
 fn is_secret_authorized(state: &ApiState, headers: &HeaderMap) -> bool {
@@ -253,7 +275,18 @@ fn ensure_http_authenticated(
     }
 }
 
-pub fn build_router(service: Arc<SmsService>, http_secret: Option<String>) -> Router {
+pub fn build_router(
+    service: Arc<SmsService>,
+    http_secret: Option<String>,
+    session_store_path: Option<PathBuf>,
+) -> Router {
+    let sessions = match session_store_path {
+        Some(ref path) => Arc::new(RwLock::new(load_persisted_sessions(path))),
+        None => Arc::new(RwLock::new(Vec::new())),
+    };
+    let session_counter = AtomicU64::new(
+        sessions.read().len() as u64 + 1,
+    );
     Router::new()
         .route("/health", get(health))
         .route("/auth/status", get(http_auth_status))
@@ -299,10 +332,6 @@ pub fn build_router(service: Arc<SmsService>, http_secret: Option<String>) -> Ro
             "/api/settings/stats/summary",
             post(get_remote_stats_summary),
         )
-        .route(
-            "/api/settings/openai-sms-regions",
-            get(get_openai_sms_regions),
-        )
         .route("/api/settings/option-cache", get(get_option_cache_overview))
         .route("/api/acquire", post(acquire_code))
         .route("/api/poll", post(poll_code))
@@ -344,14 +373,15 @@ pub fn build_router(service: Arc<SmsService>, http_secret: Option<String>) -> Ro
         .with_state(ApiState {
             service,
             http_secret,
-            sessions: Arc::new(RwLock::new(Vec::new())),
-            session_counter: Arc::new(AtomicU64::new(1)),
+            sessions,
+            session_counter: Arc::new(session_counter),
+            session_store_path,
         })
 }
 
 pub async fn serve_http(service: Arc<SmsService>, bind: &str) -> anyhow::Result<()> {
     let listener = TcpListener::bind(bind).await?;
-    axum::serve(listener, build_router(service, None)).await?;
+    axum::serve(listener, build_router(service, None, None)).await?;
     Ok(())
 }
 
@@ -360,9 +390,18 @@ pub async fn spawn_http_server(
     config: &ServerConfig,
     http_secret: Option<String>,
 ) -> anyhow::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
+    spawn_http_server_with_sessions(service, config, http_secret, None).await
+}
+
+pub async fn spawn_http_server_with_sessions(
+    service: Arc<SmsService>,
+    config: &ServerConfig,
+    http_secret: Option<String>,
+    session_store_path: Option<PathBuf>,
+) -> anyhow::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
     let listener = TcpListener::bind(&config.http_bind).await?;
     let local_addr = listener.local_addr()?;
-    let router = build_router(service, http_secret);
+    let router = build_router(service, http_secret, session_store_path);
     let handle = tokio::spawn(async move {
         if let Err(error) = axum::serve(listener, router).await {
             eprintln!("embedded http server failed: {error}");
@@ -471,6 +510,7 @@ async fn http_auth_login(
         uuid::Uuid::now_v7().simple()
     );
     state.sessions.write().push(session_id.clone());
+    persist_session_for_state(&state);
     let cookie = build_session_cookie(&session_id);
 
     let mut headers = HeaderMap::new();
@@ -488,6 +528,7 @@ async fn http_auth_login(
 async fn http_auth_logout(State(state): State<ApiState>, headers: HeaderMap) -> impl IntoResponse {
     if let Some(session_id) = extract_session_id(&headers) {
         state.sessions.write().retain(|item| item != &session_id);
+        persist_session_for_state(&state);
     }
 
     let mut response_headers = HeaderMap::new();
@@ -725,20 +766,6 @@ async fn regenerate_http_secret(
     state.service.log_http_access(
         "POST",
         "/api/settings/runtime/regenerate-secret",
-        if result.is_ok() { "200" } else { "400" },
-    );
-    result
-}
-
-async fn get_openai_sms_regions(
-    State(state): State<ApiState>,
-    headers: HeaderMap,
-) -> Result<Json<OpenAiSmsRegionsCache>, (StatusCode, Json<ApiError>)> {
-    ensure_http_authenticated(&state, &headers)?;
-    let result = Ok(Json(state.service.get_openai_sms_regions_cache().await));
-    state.service.log_http_access(
-        "GET",
-        "/api/settings/openai-sms-regions",
         if result.is_ok() { "200" } else { "400" },
     );
     result

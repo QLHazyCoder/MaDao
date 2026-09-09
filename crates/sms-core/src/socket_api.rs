@@ -1,10 +1,10 @@
 use crate::error::SmsError;
 use crate::models::{
-    AcquireCodeRequest, OpenAiSmsRegionsCache, PollCodeRequest, ProviderManifestList,
-    ProviderManifestSaveResponse, ProviderPriceQuery, ReleaseCodeRequest, RemoteStatsSummaryQuery,
-    RemoteStatsSummaryResponse, ReusePoolClearResponse, RoutingFailoverRequest, RoutingPlan,
-    RoutingPlanList, RoutingReplaceRequest, RuntimeAccessInfo, RuntimeSettings,
-    RuntimeSettingsUpdate, StatsSyncResult,
+    AcquireCodeRequest, PollCodeRequest, ProviderManifestList, ProviderManifestSaveResponse,
+    ProviderPriceQuery, ReleaseCodeRequest, RemoteStatsSummaryQuery, RemoteStatsSummaryResponse,
+    ReusePoolClearResponse, RoutingFailoverRequest, RoutingPlan, RoutingPlanList,
+    RoutingReplaceRequest, RuntimeAccessInfo, RuntimeSettings, RuntimeSettingsUpdate,
+    StatsSyncResult,
 };
 use plugin_sdk::ProviderManifest;
 use serde::{Deserialize, Serialize};
@@ -64,7 +64,6 @@ pub enum SocketCommand {
     RemoteStatsSummary {
         query: RemoteStatsSummaryQuery,
     },
-    OpenAiSmsRegions,
     OptionCacheOverview,
     Notifications,
     ClearNotifications,
@@ -124,6 +123,5 @@ pub type SocketProviderManifestSave = ProviderManifestSaveResponse;
 pub type SocketReusePoolClear = ReusePoolClearResponse;
 pub type SocketRuntimeSettings = RuntimeSettings;
 pub type SocketRuntimeAccessInfo = RuntimeAccessInfo;
-pub type SocketOpenAiSmsRegions = OpenAiSmsRegionsCache;
 pub type SocketStatsSyncResult = StatsSyncResult;
 pub type SocketRemoteStatsSummary = RemoteStatsSummaryResponse;

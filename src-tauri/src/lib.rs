@@ -882,7 +882,6 @@ fn socket_command_from_payload(
             )
             .map_err(|err| err.to_string())?,
         }),
-        "open_ai_sms_regions" => Ok(SocketCommand::OpenAiSmsRegions),
         "option_cache_overview" => Ok(SocketCommand::OptionCacheOverview),
         "balance" => Ok(SocketCommand::Balance {
             provider: payload

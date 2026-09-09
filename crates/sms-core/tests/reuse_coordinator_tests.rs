@@ -92,7 +92,6 @@ fn setup_service_with_state(tickets: Vec<TicketRecord>) -> (SmsService, TempDir)
         activity: vec![],
         provider_balance_cache: vec![],
         reuse_pool: HashMap::new(),
-        openai_sms_regions_cache: Default::default(),
         ticket_stats_events: vec![],
         stats_sync_status: Default::default(),
     };
@@ -524,7 +523,6 @@ async fn test_stale_eviction_ttl() {
         activity: vec![],
         provider_balance_cache: vec![],
         reuse_pool: pool,
-        openai_sms_regions_cache: Default::default(),
         ticket_stats_events: vec![],
         stats_sync_status: Default::default(),
     };
@@ -589,7 +587,6 @@ async fn test_stale_eviction_max_count() {
         activity: vec![],
         provider_balance_cache: vec![],
         reuse_pool: pool,
-        openai_sms_regions_cache: Default::default(),
         ticket_stats_events: vec![],
         stats_sync_status: Default::default(),
     };
@@ -691,7 +688,6 @@ fn test_pending_release_claims_round_trip_in_sqlite_schema() {
         activity: vec![],
         provider_balance_cache: vec![],
         reuse_pool: HashMap::new(),
-        openai_sms_regions_cache: Default::default(),
         ticket_stats_events: vec![],
         stats_sync_status: Default::default(),
     };

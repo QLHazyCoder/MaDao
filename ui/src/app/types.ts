@@ -254,6 +254,8 @@ export type SelectorState = {
   title: string;
   options: SelectorOptionViewModel[];
   resourceKind?: ResourceKind;
+  // Prevents a stale live request from replacing another provider's selector.
+  providerId?: string;
 };
 export type NotificationFeed = { items: LogEntry[] };
 export type StatsSyncStatus = {
@@ -267,7 +269,6 @@ export type RuntimeSettings = {
   auto_fallback: boolean;
   option_cache_enabled: boolean;
   option_cache_poll_interval_minutes: number;
-  only_show_openai_sms_countries: boolean;
   check_updates_on_launch: boolean;
   http_port: number;
   http_secret: string;
@@ -281,7 +282,6 @@ export type RuntimeSettingsUpdate = {
   auto_fallback: boolean;
   option_cache_enabled: boolean;
   option_cache_poll_interval_minutes: number;
-  only_show_openai_sms_countries: boolean;
   check_updates_on_launch: boolean;
   http_port: number;
   stats_sync_instance_id?: string;
@@ -306,14 +306,6 @@ export type RemoteStatsSummaryResponse = {
     avg_effective_price: number | null;
     avg_receive_time_secs: number | null;
   }>;
-};
-
-export type OpenAiSmsRegionsCache = {
-  sms_regions: string[];
-  sms_only_regions: string[];
-  whatsapp_regions: string[];
-  all_regions: string[];
-  fetched_at?: string | null;
 };
 
 export type RuntimeAccessInfo = {

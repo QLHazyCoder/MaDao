@@ -49,7 +49,7 @@ Category: `arch`
 ## Persistence And Config
 
 - App config and default provider manifests are seeded by Tauri into user config directories.
-- Runtime state (tickets, logs, activity, reuse pool, provider balance cache, OpenAI regions cache) is persisted via `RuntimeStore` backed by SQLite (`runtime.db`). Falls back to in-memory store when no DB path is provided.
+- Runtime state (tickets, logs, activity, reuse pool, provider balance cache) is persisted via `RuntimeStore` backed by SQLite (`runtime.db`). Falls back to in-memory store when no DB path is provided.
 - Configuration data (runtime settings, routing plans, provider options cache) remains as JSON files on disk.
 - `RuntimeStore` exposes batch operations (`RuntimeStoreBatch`) for transactional multi-entity writes and trait-based repositories (`RuntimeStateRepository`, `ReleaseCoordinationRepository`) for domain-specific access.
 - `.workflow/` exists for process artifacts and specs; do not overwrite existing workflow state blindly.
@@ -59,12 +59,3 @@ Category: `arch`
 - UI fixes should preserve existing design-system structure under `ui/src/components` and `ui/src/app`.
 - Cross-layer changes should keep API contracts synchronized, especially `TicketRecord`, provider summaries, and runtime snapshot payloads.
 - Prefer adding provider-specific UX guards in UI while keeping upstream/server-side validation intact.
-
-
-<spec-entry category="arch" keywords="openai,sms,whatsapp,country-filter,runtime-settings" date="2026-05-24" source="ui/src/app/utils.ts:212">
-
-### OpenAI 短信国家过滤语义
-
-OpenAI 短信国家过滤必须按运行时缓存的区域集合计算：最终可见国家 = 当前平台支持国家 - (whatsapp_regions - sms_regions)。如果某国家同时存在于 sms_regions 与 whatsapp_regions，必须保留显示，因为 sms 区域优先于 WhatsApp 排除。该规则属于运行时设置与国家选择器的共享业务约束，后续 UI、API、缓存刷新与文档都必须保持一致。
-
-</spec-entry>

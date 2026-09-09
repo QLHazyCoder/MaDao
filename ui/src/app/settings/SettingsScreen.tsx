@@ -32,7 +32,6 @@ export type SettingsScreenProps = {
   optionCacheEnabled: boolean;
   optionCachePollIntervalMinutes: number;
   optionCacheOverview: OptionCacheOverview;
-  onlyShowOpenAiSmsCountries: boolean;
   checkUpdatesOnLaunch: boolean;
   updateCheckBusy: boolean;
   updateInstallBusy: boolean;
@@ -49,7 +48,6 @@ export type SettingsScreenProps = {
   statsSyncLastError?: string | null;
   onOptionCacheEnabledChange: (enabled: boolean) => void;
   onOptionCachePollIntervalChange: (minutes: number) => void;
-  onOnlyShowOpenAiSmsCountriesChange: (enabled: boolean) => void;
   onCheckUpdatesOnLaunchChange: (enabled: boolean) => void;
   onInstallUpdate: () => void;
   onOpenUpdateRelease: () => void;
@@ -150,12 +148,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
             <span className="font-text text-utility font-normal tracking-[var(--ds-type-utility-tracking)] text-ds-text-primary opacity-70">{t('Enable cache')}</span>
             <ToggleSwitch checked={props.optionCacheEnabled} onChange={props.onOptionCacheEnabledChange} ariaLabel={t('Toggle option cache')} />
           </div>
-          <ToggleSetting
-            title={t('Only show OpenAI SMS countries')}
-            description={t('Hide countries that are WhatsApp-only for OpenAI verification. Countries explicitly listed in OpenAI SMS regions stay visible. Region data refreshes daily and is cached locally.')}
-            checked={props.onlyShowOpenAiSmsCountries}
-            onChange={props.onOnlyShowOpenAiSmsCountriesChange}
-          />
           <SettingChoiceRow
             label={t('Polling Interval')}
             control={(

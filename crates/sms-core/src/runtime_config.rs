@@ -15,6 +15,7 @@ pub const DEFAULT_STATS_SYNC_API_TOKEN: &str = match option_env!("STATS_SYNC_API
     Some(v) => v,
     None => "",
 };
+const LEGACY_OPENAI_COUNTRY_FILTER_KEY: &str = "only_show_openai_sms_countries";
 
 #[derive(Debug, Clone)]
 pub struct AppPersistencePaths {
@@ -114,8 +115,17 @@ impl RuntimeConfigRepository for FileRuntimeConfigRepository {
 pub fn load_runtime_settings(path: &Path) -> Result<RuntimeSettings, SmsError> {
     let content = fs::read_to_string(path)
         .map_err(|err| SmsError::Io(format!("read runtime settings failed: {err}")))?;
-    serde_json::from_str(&content)
-        .map_err(|err| SmsError::Config(format!("parse runtime settings failed: {err}")))
+    let mut value: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|err| SmsError::Config(format!("parse runtime settings failed: {err}")))?;
+    let removed_legacy_filter = value
+        .as_object_mut()
+        .is_some_and(|settings| settings.remove(LEGACY_OPENAI_COUNTRY_FILTER_KEY).is_some());
+    let settings = serde_json::from_value(value)
+        .map_err(|err| SmsError::Config(format!("parse runtime settings failed: {err}")))?;
+    if removed_legacy_filter {
+        save_runtime_settings(path, &settings)?;
+    }
+    Ok(settings)
 }
 
 pub fn load_runtime_settings_from_disk(path: &Path) -> Result<RuntimeSettings, SmsError> {
@@ -128,7 +138,6 @@ pub fn default_runtime_settings() -> RuntimeSettings {
         auto_fallback: true,
         option_cache_enabled: true,
         option_cache_poll_interval_minutes: 30,
-        only_show_openai_sms_countries: false,
         check_updates_on_launch: true,
         http_port: 7822,
         http_secret: generate_runtime_secret(),
@@ -206,4 +215,29 @@ pub fn save_routing_plans(path: &Path, store: &RoutingPlanStore) -> Result<(), S
 
 fn generate_runtime_secret() -> String {
     Uuid::now_v7().simple().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loading_settings_removes_the_retired_openai_country_filter() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(RUNTIME_SETTINGS_FILE_NAME);
+        let expected = default_runtime_settings();
+        let mut legacy_settings = serde_json::to_value(&expected).unwrap();
+        legacy_settings.as_object_mut().unwrap().insert(
+            LEGACY_OPENAI_COUNTRY_FILTER_KEY.to_string(),
+            serde_json::Value::Bool(true),
+        );
+        fs::write(&path, serde_json::to_string(&legacy_settings).unwrap()).unwrap();
+
+        let loaded = load_runtime_settings(&path).unwrap();
+        let persisted: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+
+        assert_eq!(loaded.http_secret, expected.http_secret);
+        assert!(persisted.get(LEGACY_OPENAI_COUNTRY_FILTER_KEY).is_none());
+    }
 }

@@ -1,7 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
   NotificationFeed,
-  OpenAiSmsRegionsCache,
   OptionCacheOverview,
   OptionListResponse,
   ProviderBalance,
@@ -155,10 +154,6 @@ export function fetchRemoteStatsSummaryViaSocket(query?: {
   return socketInvoke('remote_stats_summary', {
     query: query ?? {},
   });
-}
-
-export function fetchOpenAiSmsRegionsViaSocket(): Promise<OpenAiSmsRegionsCache> {
-  return socketInvoke<OpenAiSmsRegionsCache>('open_ai_sms_regions');
 }
 
 export function fetchOptionCacheOverviewViaSocket(): Promise<OptionCacheOverview> {

@@ -196,7 +196,6 @@ RuntimeStore
 - `ActivityEntry` — user-visible activity feed
 - `ReusePoolEntry` — phone number reuse pool per provider
 - `ProviderBalanceCacheEntry` — cached provider balances
-- `OpenAiSmsRegionsCache` — OpenAI SMS region availability
 - Release coordination leases (`ReleaseOwnerLease`)
 
 **Repository traits**:

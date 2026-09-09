@@ -482,8 +482,6 @@ pub struct RuntimeSettings {
     pub auto_fallback: bool,
     pub option_cache_enabled: bool,
     pub option_cache_poll_interval_minutes: u32,
-    #[serde(default = "default_only_show_openai_sms_countries")]
-    pub only_show_openai_sms_countries: bool,
     #[serde(default = "default_check_updates_on_launch")]
     pub check_updates_on_launch: bool,
     #[serde(default = "default_http_port")]
@@ -506,7 +504,6 @@ pub struct RuntimeSettingsUpdate {
     pub auto_fallback: bool,
     pub option_cache_enabled: bool,
     pub option_cache_poll_interval_minutes: u32,
-    pub only_show_openai_sms_countries: bool,
     pub check_updates_on_launch: bool,
     pub http_port: u16,
     #[serde(default)]
@@ -515,10 +512,6 @@ pub struct RuntimeSettingsUpdate {
     pub stats_sync_base_url: String,
     #[serde(default)]
     pub stats_sync_api_token: String,
-}
-
-fn default_only_show_openai_sms_countries() -> bool {
-    false
 }
 
 fn default_check_updates_on_launch() -> bool {
@@ -881,25 +874,9 @@ pub struct RuntimeStateStore {
     #[serde(default)]
     pub reuse_pool: HashMap<String, Vec<ReusePoolEntry>>,
     #[serde(default)]
-    pub openai_sms_regions_cache: OpenAiSmsRegionsCache,
-    #[serde(default)]
     pub ticket_stats_events: Vec<TicketStatsEvent>,
     #[serde(default)]
     pub stats_sync_status: StatsSyncStatus,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct OpenAiSmsRegionsCache {
-    #[serde(default)]
-    pub sms_regions: Vec<String>,
-    #[serde(default)]
-    pub sms_only_regions: Vec<String>,
-    #[serde(default)]
-    pub whatsapp_regions: Vec<String>,
-    #[serde(default)]
-    pub all_regions: Vec<String>,
-    #[serde(default)]
-    pub fetched_at: Option<DateTime<Utc>>,
 }
 
 /// Three-provider reuse capability truth.

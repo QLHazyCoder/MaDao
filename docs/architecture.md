@@ -103,28 +103,14 @@ provider manifest (*.toml)
 
 这类信息优先从 manifest 读取，避免前后端按 provider id 写死分支。
 
-## OpenAI 短信国家过滤
+## 服务商能力边界
 
-设置页里的 `仅显示 OpenAI 短信可用国家` 不是简单地“只显示 `sms_regions`”。
+路由候选项只依赖所选服务商的数据。国家和服务目录来自服务商资源发现接口；
+价格与库存来自服务商的产品报价接口。内部服务键（例如 `openai`）只用于通过
+provider manifest 映射为该服务商的原生服务代码，不能触发任何目标平台地区查询或过滤。
 
-当前项目固定语义是：
-
-```text
-当前平台支持国家 - (whatsapp_regions - sms_regions)
-```
-
-也就是：
-
-- `sms_regions` 是显式保留名单
-- `whatsapp_regions` 只用于排除 `whatsapp-only` 国家
-- 如果某国家同时存在于 `sms_regions` 与 `whatsapp_regions`，仍然必须显示
-
-这条规则必须在以下层面保持一致：
-
-- Rust 侧 OpenAI 区域缓存
-- runtime settings 持久化字段
-- UI 国家选择器过滤逻辑
-- API / OpenAPI / 外部文档
+当报价数据可用时，UI 用它优先展示该产品当前可报价的国家；报价查询失败不会删除
+服务商已声明的国家目录，避免暂时的上游故障误伤可选路由。
 
 ## 热重载流
 

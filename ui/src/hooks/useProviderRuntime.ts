@@ -2,7 +2,6 @@ import { startTransition, useMemo } from 'react';
 import type {
   ActivationFormState,
   LanguageCode,
-  OpenAiSmsRegionsCache,
   PriceSortKey,
   ProviderDynamicOptions,
   ProviderManifest,
@@ -15,13 +14,11 @@ import type {
   Snapshot,
   StoreQueryState,
 } from '../app/types';
-import { filterPriceItemsByOpenAiSmsAvailability } from '../app/utils';
 import {
   clearProviderReusePool,
   fetchRuntimeAccessInfo,
   fetchProviderOptionsCache,
   fetchOptionCacheOverview,
-  fetchOpenAiSmsRegions,
   fetchProviderBalance,
   fetchProviderManifests,
   fetchProviderPrices,
@@ -86,10 +83,6 @@ type DataState = {
   setNotifications: (value: Array<{ timestamp: string; scope: string; level: string; message: string }> | ((prev: Array<{ timestamp: string; scope: string; level: string; message: string }>) => Array<{ timestamp: string; scope: string; level: string; message: string }>)) => void;
   runtimeSettings: RuntimeSettings;
   setRuntimeSettings: (value: RuntimeSettings | ((prev: RuntimeSettings) => RuntimeSettings)) => void;
-  openAiSmsRegions: OpenAiSmsRegionsCache;
-  setOpenAiSmsRegions: (
-    value: OpenAiSmsRegionsCache | ((prev: OpenAiSmsRegionsCache) => OpenAiSmsRegionsCache)
-  ) => void;
   optionCacheOverview: import('../app/types').OptionCacheOverview;
   setOptionCacheOverview: (
     value:
@@ -173,13 +166,7 @@ export function useProviderRuntime(
     if (!panel) return [];
     const query = normalizedSelectedStoreQuery;
     const sort = data.priceSort[ui.selectedProvider] ?? { key: 'country' as PriceSortKey, dir: 'asc' as const };
-    const openAiFiltered = filterPriceItemsByOpenAiSmsAvailability(
-      panel.items,
-      data.openAiSmsRegions,
-      data.runtimeSettings.only_show_openai_sms_countries,
-      panel.service || query.service || selectedManifest?.defaults.service,
-    );
-    const filtered = openAiFiltered.filter((item) => {
+    const filtered = panel.items.filter((item) => {
       if (query.country && item.country !== query.country) return false;
       if (query.operator && item.operator !== query.operator) return false;
       if (!query.search.trim()) return true;
@@ -199,9 +186,7 @@ export function useProviderRuntime(
       }
     });
   }, [
-    data.openAiSmsRegions,
     data.priceSort,
-    data.runtimeSettings.only_show_openai_sms_countries,
     selectedManifest?.defaults.service,
     selectedPrices,
     ui.selectedProvider,
@@ -311,14 +296,12 @@ export function useProviderRuntime(
 
   async function loadRuntimeSettings() {
     try {
-      const [settings, cacheOverview, openAiSmsRegions] = await Promise.all([
+      const [settings, cacheOverview] = await Promise.all([
         fetchRuntimeSettings(),
         fetchOptionCacheOverview(),
-        fetchOpenAiSmsRegions(),
       ]);
       data.setRuntimeSettings(settings);
       data.setOptionCacheOverview(cacheOverview);
-      data.setOpenAiSmsRegions(openAiSmsRegions);
     } catch {
       ui.setStatusMessage(translate('failed_load_runtime_settings'));
     }

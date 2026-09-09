@@ -40,17 +40,11 @@ http://127.0.0.1:7822
 - `auto_fallback`
 - `option_cache_enabled`
 - `option_cache_poll_interval_minutes`
-- `only_show_openai_sms_countries`
 - `check_updates_on_launch`
 - `GET /api/settings/option-cache`
 
-`only_show_openai_sms_countries` 的过滤规则不是“仅保留 `sms_regions`”，而是：
-
-```text
-当前平台支持国家 - (whatsapp_regions - sms_regions)
-```
-
-也就是只排除 `whatsapp-only` 国家；如果某国家同时在 `sms_regions` 与 `whatsapp_regions` 中，仍然保留。
+路由候选项、价格和库存均以服务商接口返回的数据为准。`service` 是内部产品键，
+由 provider manifest 映射为服务商原生服务代码；daemon 不查询或应用目标平台的地区名单。
 
 provider manifest 的复用配置当前包括：
 

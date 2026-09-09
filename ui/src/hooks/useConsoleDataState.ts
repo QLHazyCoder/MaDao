@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type {
   LogEntry,
-  OpenAiSmsRegionsCache,
   OptionCacheOverview,
   PriceSortKey,
   ProviderDynamicOptions,
@@ -27,7 +26,6 @@ export function useConsoleDataState() {
     auto_fallback: true,
     option_cache_enabled: true,
     option_cache_poll_interval_minutes: 30,
-    only_show_openai_sms_countries: false,
     check_updates_on_launch: true,
     http_port: 7822,
     http_secret: '',
@@ -35,13 +33,6 @@ export function useConsoleDataState() {
     stats_sync_enabled: false,
     stats_sync_base_url: '',
     stats_sync_api_token: '',
-  });
-  const [openAiSmsRegions, setOpenAiSmsRegions] = useState<OpenAiSmsRegionsCache>({
-    sms_regions: [],
-    sms_only_regions: [],
-    whatsapp_regions: [],
-    all_regions: [],
-    fetched_at: null,
   });
   const [optionCacheOverview, setOptionCacheOverview] = useState<OptionCacheOverview>({
     fresh_providers: 0,
@@ -72,8 +63,6 @@ export function useConsoleDataState() {
     setNotifications,
     runtimeSettings,
     setRuntimeSettings,
-    openAiSmsRegions,
-    setOpenAiSmsRegions,
     optionCacheOverview,
     setOptionCacheOverview,
     providerOptions,

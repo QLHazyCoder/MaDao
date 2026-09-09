@@ -68,7 +68,6 @@ All HTTP endpoints served via Axum (`crates/sms-server/src/lib.rs`). Auth-protec
 | GET | `/api/settings/runtime` | Get runtime settings |
 | POST | `/api/settings/runtime` | Update runtime settings |
 | POST | `/api/settings/runtime/regenerate-secret` | Regenerate HTTP auth secret |
-| GET | `/api/settings/openai-sms-regions` | Get OpenAI SMS region availability cache |
 | GET | `/api/settings/option-cache` | Get option cache overview (fresh/stale/missing counts) |
 
 ### Notifications
@@ -124,10 +123,10 @@ All HTTP endpoints served via Axum (`crates/sms-server/src/lib.rs`). Auth-protec
 - Optional HMAC secret for payload verification
 - Dispatched via `maybe_dispatch_ticket_callbacks`
 
-### OpenAI SMS Region Awareness
-- Fetches OpenAI's dynamic SMS region config from auth bootstrap page
-- Caches with 24h TTL (`OPENAI_SMS_REGIONS_CACHE_TTL_HOURS`)
-- Filters country/price lists to only show OpenAI-available regions (optional setting)
+### Provider-Sourced Country Availability
+- Country, service, and carrier lists are supplied by the selected SMS provider
+- Live price responses promote and add countries offered for the selected service
+- No external product policy or region data participates in country selection
 
 ---
 
@@ -143,7 +142,7 @@ All screens in `ui/src/app/`. Tauri desktop app + HTTP web mode. i18n via `react
 | Routing | `routing/RoutingScreen.tsx` | Routing plan CRUD with drag-and-drop item ordering, per-item provider/country/operator/price config |
 | Messages | `messages/MessagesScreen.tsx` | Ticket list with status filters, code display, copy, release actions (finish/cancel/retry), auto-release countdown |
 | Logs | `logs/LogsScreen.tsx` | System log viewer with filtering |
-| Settings | `settings/SettingsScreen.tsx` | Auto-refresh toggle, language, appearance theme, option cache config, OpenAI SMS filter, HTTP port/secret, update check |
+| Settings | `settings/SettingsScreen.tsx` | Auto-refresh toggle, language, appearance theme, option cache config, HTTP port/secret, update check |
 | HTTP Login | `auth/HttpLoginScreen.tsx` | Secret-based login for HTTP remote access mode |
 
 ### Modals / Overlays
@@ -203,7 +202,6 @@ JSON-over-newline protocol on Unix socket (macOS/Linux only, `#[cfg(unix)]`). Su
 | `ReloadProviders` | Hot-reload provider registry |
 | `RuntimeSettings` / `UpdateRuntimeSettings` | Settings read/write |
 | `RegenerateHttpSecret` | Regenerate auth secret |
-| `OpenAiSmsRegions` | Get OpenAI SMS region cache |
 | `OptionCacheOverview` | Cache health overview |
 | `Notifications` / `ClearNotifications` | Notification feed |
 | `ProviderCountries` / `ProviderServices` / `ProviderOperators` | Dynamic option queries |

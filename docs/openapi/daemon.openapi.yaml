@@ -426,27 +426,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-  /api/settings/openai-sms-regions:
-    get:
-      tags: [settings]
-      summary: Get cached OpenAI verification channel regions
-      description: >
-        Returns the locally cached OpenAI verification channel region sets. The UI uses
-        `sms_regions` as a keep-list and excludes only `whatsapp-only` countries, which is
-        equivalent to `all_supported_countries - (whatsapp_regions - sms_regions)`.
-      operationId: getOpenAiSmsRegions
-      security:
-        - bearerAuth: []
-        - sessionCookie: []
-      responses:
-        '200':
-          description: Cached OpenAI SMS region metadata
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OpenAiSmsRegionsCache'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
   /api/settings/option-cache:
     get:
       tags: [settings]
@@ -1720,12 +1699,6 @@ components:
         option_cache_poll_interval_minutes:
           type: integer
           minimum: 0
-        only_show_openai_sms_countries:
-          type: boolean
-          description: >
-            When enabled, country selectors exclude only `whatsapp-only` countries. Any country
-            explicitly present in `sms_regions` remains visible even if it also appears in
-            `whatsapp_regions`.
         check_updates_on_launch:
           type: boolean
         http_port:
@@ -1739,7 +1712,6 @@ components:
         - auto_fallback
         - option_cache_enabled
         - option_cache_poll_interval_minutes
-        - only_show_openai_sms_countries
         - check_updates_on_launch
         - http_port
         - http_secret
@@ -1756,8 +1728,6 @@ components:
         option_cache_poll_interval_minutes:
           type: integer
           minimum: 0
-        only_show_openai_sms_countries:
-          type: boolean
         check_updates_on_launch:
           type: boolean
         http_port:
@@ -1769,38 +1739,8 @@ components:
         - auto_fallback
         - option_cache_enabled
         - option_cache_poll_interval_minutes
-        - only_show_openai_sms_countries
         - check_updates_on_launch
         - http_port
-    OpenAiSmsRegionsCache:
-      type: object
-      additionalProperties: false
-      properties:
-        sms_regions:
-          type: array
-          items:
-            type: string
-        sms_only_regions:
-          type: array
-          items:
-            type: string
-        whatsapp_regions:
-          type: array
-          items:
-            type: string
-        all_regions:
-          type: array
-          items:
-            type: string
-        fetched_at:
-          type: string
-          format: date-time
-          nullable: true
-      required:
-        - sms_regions
-        - sms_only_regions
-        - whatsapp_regions
-        - all_regions
     ProviderManifestSaveResponse:
       type: object
       additionalProperties: false
