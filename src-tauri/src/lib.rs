@@ -1042,10 +1042,11 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let config = config.clone();
             let socket_path = config.socket_path.clone();
+            let session_store_path = Some(config_dir.join("http_sessions.json"));
             let cache_service = Arc::clone(&service);
             if is_runtime_owner {
                 tauri::async_runtime::spawn(async move {
-                    match spawn_http_server(service, &config, None).await {
+                    match spawn_http_server(service, &config, None, session_store_path).await {
                         Ok((addr, _handle)) => {
                             eprintln!("embedded http server listening on {addr}");
                         }

@@ -206,6 +206,7 @@ export function App() {
   const [httpAuthenticated, setHttpAuthenticated] = useState(IS_DESKTOP_RUNTIME);
   const [httpAuthError, setHttpAuthError] = useState('');
   const hasAutoCheckedUpdatesRef = useRef(false);
+  const loginInProgressRef = useRef(false);
   const notificationsPopoverRef = useRef<HTMLDivElement | null>(null);
   const {
     snapshot,
@@ -578,10 +579,14 @@ export function App() {
     if (!IS_WEB_RUNTIME) return;
     void fetchHttpAuthStatus()
       .then((status) => {
-        setHttpAuthenticated(status.authenticated);
+        if (!loginInProgressRef.current) {
+          setHttpAuthenticated(status.authenticated);
+        }
       })
       .catch(() => {
-        setHttpAuthenticated(false);
+        if (!loginInProgressRef.current) {
+          setHttpAuthenticated(false);
+        }
       })
       .finally(() => setHttpAuthReady(true));
   }, []);
@@ -2208,6 +2213,7 @@ export function App() {
 
   async function handleHttpLogin() {
     try {
+      loginInProgressRef.current = true;
       setHttpAuthBusy(true);
       setHttpAuthError('');
       const status = await loginHttpAccess(httpSecretInput);
@@ -2218,6 +2224,7 @@ export function App() {
       setHttpAuthError(formatError(error));
     } finally {
       setHttpAuthBusy(false);
+      loginInProgressRef.current = false;
     }
   }
 

@@ -51,9 +51,10 @@ async fn main() -> anyhow::Result<()> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
+    let session_store_path = Some(config_dir.join("http_sessions.json"));
 
     let (http_addr, _http_handle) =
-        spawn_http_server(Arc::clone(&service), &config, http_secret_override)
+        spawn_http_server(Arc::clone(&service), &config, http_secret_override, session_store_path.clone())
             .await
             .with_context(|| format!("bind http listener failed: {}", config.http_bind))?;
 
@@ -73,6 +74,7 @@ async fn main() -> anyhow::Result<()> {
                 .ok()
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty()),
+            session_store_path,
         )
         .await
         .with_context(|| {

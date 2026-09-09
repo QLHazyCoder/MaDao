@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   ActivationFormState,
   AppearanceTheme,
@@ -11,6 +11,18 @@ import type {
 } from '../app/types';
 import { normalizeAppearanceTheme } from '../app/theme';
 
+const VALID_SCREENS: readonly ScreenId[] = ['overview', 'providers', 'routing', 'messages', 'settings', 'logs'];
+
+function loadPersistedScreen(): ScreenId {
+  try {
+    const saved = window.localStorage.getItem('madao-active-screen');
+    if (saved && (VALID_SCREENS as readonly string[]).includes(saved)) {
+      return saved as ScreenId;
+    }
+  } catch {}
+  return 'overview';
+}
+
 export function useConsoleUiState() {
   const preferredLanguage = typeof window !== 'undefined'
     ? (window.localStorage.getItem('madao-language') as LanguageCode | null)
@@ -21,7 +33,7 @@ export function useConsoleUiState() {
   const [selectedProvider, setSelectedProvider] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [busyAction, setBusyAction] = useState<string>('');
-  const [activeScreen, setActiveScreen] = useState<ScreenId>('overview');
+  const [activeScreen, setActiveScreen] = useState<ScreenId>(loadPersistedScreen);
   const [providerView, setProviderView] = useState<'list' | 'workspace'>('list');
   const [activeProviderSection, setActiveProviderSection] = useState<ProviderSectionId>('config');
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -49,6 +61,12 @@ export function useConsoleUiState() {
   const [notificationCursor, setNotificationCursor] = useState(0);
   const [appearanceTheme, setAppearanceTheme] = useState<AppearanceTheme>(preferredTheme);
   const [language, setLanguage] = useState<LanguageCode>(preferredLanguage ?? 'en');
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('madao-active-screen', activeScreen);
+    } catch {}
+  }, [activeScreen]);
 
   return {
     selectedProvider,

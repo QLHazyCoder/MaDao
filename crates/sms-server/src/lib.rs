@@ -210,7 +210,7 @@ fn build_session_cookie(session_id: &str) -> HeaderValue {
     .expect("valid session cookie")
 }
 
-fn load_persisted_sessions(path: &Path) -> Vec<String> {
+fn load_persisted_sessions(path: &std::path::Path) -> Vec<String> {
     let content = match std::fs::read_to_string(path) {
         Ok(content) => content,
         Err(_) => return Vec::new(),
@@ -218,7 +218,7 @@ fn load_persisted_sessions(path: &Path) -> Vec<String> {
     serde_json::from_str(&content).unwrap_or_default()
 }
 
-fn persist_sessions(path: &Path, sessions: &[String]) {
+fn persist_sessions(path: &std::path::Path, sessions: &[String]) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -386,14 +386,6 @@ pub async fn serve_http(service: Arc<SmsService>, bind: &str) -> anyhow::Result<
 }
 
 pub async fn spawn_http_server(
-    service: Arc<SmsService>,
-    config: &ServerConfig,
-    http_secret: Option<String>,
-) -> anyhow::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
-    spawn_http_server_with_sessions(service, config, http_secret, None).await
-}
-
-pub async fn spawn_http_server_with_sessions(
     service: Arc<SmsService>,
     config: &ServerConfig,
     http_secret: Option<String>,
@@ -1210,7 +1202,7 @@ mod tests {
         let provider_dir = fixture_provider_dir();
         let registry = ProviderRegistry::load_from_dir(provider_dir).unwrap();
         let service = Arc::new(SmsService::new(registry, 32));
-        build_router(service, None)
+        build_router(service, None, None)
     }
 
     fn test_context() -> (Router, String) {
@@ -1218,7 +1210,7 @@ mod tests {
         let registry = ProviderRegistry::load_from_dir(provider_dir).unwrap();
         let service = Arc::new(SmsService::new(registry, 32));
         let secret = service.runtime_settings().http_secret.clone();
-        (build_router(service, None), secret)
+        (build_router(service, None, None), secret)
     }
 
     async fn login_cookie(app: &Router, secret: &str) -> String {

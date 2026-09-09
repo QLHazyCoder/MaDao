@@ -117,6 +117,13 @@
       <p id="error" class="error" hidden></p>
     </div>
     <script>
+      fetch('/auth/status', { credentials: 'include' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.authenticated) window.location.href = '/app';
+        })
+        .catch(function() {});
+
       const form = document.getElementById('login-form');
       const secretInput = document.getElementById('secret');
       const errorNode = document.getElementById('error');

@@ -4,6 +4,7 @@ services:
       context: .
       target: daemon
     image: madao/daemon:local
+    container_name: madao-daemon
     restart: unless-stopped
     environment:
       MADAO_RUNTIME_MODE: docker
@@ -27,6 +28,7 @@ services:
       context: .
       target: web
     image: madao/web:local
+    container_name: madao-web
     restart: unless-stopped
     depends_on:
       daemon:
