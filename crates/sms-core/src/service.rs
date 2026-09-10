@@ -3596,11 +3596,6 @@ impl SmsService {
         provider_id: &str,
         manifest: ProviderManifest,
     ) -> Result<ProviderManifestSaveResponse, SmsError> {
-        if manifest.enabled && !self.can_enable_manifest(provider_id) {
-            return Err(SmsError::InvalidRequest(
-                "provider cannot be enabled before a fresh option cache is available".to_string(),
-            ));
-        }
         let saved = self.registry.write().save_manifest(provider_id, manifest)?;
         let cache_refresh = self.refresh_provider_options(provider_id).await;
         self.log(
@@ -4377,13 +4372,6 @@ impl SmsService {
     ) -> OptionCacheState {
         let fetched_at = self.provider_option_cache_fetched_at(provider_id);
         cache_state(fetched_at, settings)
-    }
-
-    fn can_enable_manifest(&self, provider_id: &str) -> bool {
-        let settings = self.runtime_settings();
-        !settings.option_cache_enabled
-            || self.provider_option_cache_state_with_settings(provider_id, &settings)
-                == OptionCacheState::Fresh
     }
 
     fn resolve_routing_plan(&self, request: &AcquireCodeRequest) -> Result<RoutingPlan, SmsError> {
@@ -5258,6 +5246,35 @@ mod tests {
         );
         let reloaded = service.provider_manifest("mock").unwrap();
         assert_eq!(reloaded.description.as_deref(), Some("updated manifest"));
+    }
+
+    #[tokio::test]
+    async fn manifest_save_does_not_require_option_cache_before_credentials() {
+        let service = make_service();
+        let mut manifest = service.provider_manifest("smsbower").unwrap();
+        manifest.description = Some("saved before first option refresh".to_string());
+
+        let saved = service
+            .save_provider_manifest("smsbower", manifest)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            saved.manifest.description.as_deref(),
+            Some("saved before first option refresh")
+        );
+        assert!(saved
+            .cache_refresh_error
+            .as_deref()
+            .is_some_and(|error| error.contains("requires api_key")));
+        assert_eq!(
+            service
+                .provider_manifest("smsbower")
+                .unwrap()
+                .description
+                .as_deref(),
+            Some("saved before first option refresh")
+        );
     }
 
     #[tokio::test]
