@@ -1,5 +1,5 @@
 import { AlertCircle, Copy, Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppButton, PageHeader, SegmentedControl } from '../ui-bridge';
 import type { LanguageCode, MessageFilter, ProviderManifest, TicketDecoration, TicketRecord } from '../types';
@@ -52,13 +52,46 @@ export function MessagesScreen(props: MessagesScreenProps) {
     return null;
   }
 
-  const visibleTickets = [...props.tickets]
+  const sortedTickets = [...props.tickets]
     .sort((left, right) => {
       const leftTime = new Date(left.created_at ?? 0).getTime();
       const rightTime = new Date(right.created_at ?? 0).getTime();
       return rightTime - leftTime;
-    })
-    .slice(0, 8);
+    });
+
+  const PAGE_SIZE = 10;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [loading, setLoading] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  const visibleTickets = sortedTickets.slice(0, visibleCount);
+  const hasMore = visibleCount < sortedTickets.length;
+
+  const loadMore = useCallback(() => {
+    if (loading || !hasMore) return;
+    setLoading(true);
+    setTimeout(() => {
+      setVisibleCount(prev => Math.min(prev + PAGE_SIZE, sortedTickets.length));
+      setLoading(false);
+    }, 200);
+  }, [loading, hasMore, sortedTickets.length]);
+
+  useEffect(() => {
+    if (observerRef.current) observerRef.current.disconnect();
+
+    observerRef.current = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMore && !loading) {
+        loadMore();
+      }
+    }, { threshold: 0.1 });
+
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current);
+    }
+
+    return () => observerRef.current?.disconnect();
+  }, [hasMore, loading, loadMore, visibleCount]);
 
   useEffect(() => {
       const needsLiveTimer = props.tickets.some((ticket) => {
@@ -112,8 +145,8 @@ export function MessagesScreen(props: MessagesScreenProps) {
           const providerBadgeLabel = providerManifest?.ui?.badge_label;
 
           return (
-            <div className="flex flex-col gap-5 rounded-[16px] border border-ds-border bg-ds-surface px-6 py-6 shadow-ds backdrop-blur-ds" key={ticket.id}>
-              <div className="flex flex-col gap-4 min-[760px]:flex-row min-[760px]:items-center min-[760px]:justify-between">
+            <div className="flex flex-col gap-3 rounded-[12px] border border-ds-border bg-ds-surface px-4 py-3 shadow-ds backdrop-blur-ds" key={ticket.id}>
+              <div className="flex flex-col gap-2 min-[760px]:flex-row min-[760px]:items-center min-[760px]:justify-between">
                 <div className="flex items-center gap-3">
                   <ResourceBadge
                     kind="service"
@@ -162,7 +195,7 @@ export function MessagesScreen(props: MessagesScreenProps) {
               </div>
 
               {isReceived && (
-                <div className="flex w-full flex-col items-center justify-center gap-3 rounded-[12px] border-2 border-ds-state-success bg-ds-surface-subtle px-5 py-8">
+                <div className="flex w-full flex-col items-center justify-center gap-2 rounded-[8px] border-2 border-ds-state-success bg-ds-surface-subtle px-4 py-3">
                   <div className="flex items-center gap-4">
                     <span className="text-[48px] font-bold leading-none tracking-[6px] text-ds-text-primary">{ticket.code ?? '------'}</span>
                     <button className="inline-flex h-11 w-11 items-center justify-center rounded-pill border border-ds-border bg-ds-surface shadow-[0_1px_2px_rgba(0,0,0,0.08)]" onClick={() => props.onCopy(ticket.code ?? '', t('SMS code'))} disabled={!ticket.code}>
@@ -173,7 +206,7 @@ export function MessagesScreen(props: MessagesScreenProps) {
                 </div>
               )}
               {isActivePhase && (
-                <div className="flex w-full flex-col items-center justify-center gap-3 rounded-[12px] border-2 border-dashed border-ds-state-warning bg-ds-state-warning/10 px-5 py-8">
+                <div className="flex w-full flex-col items-center justify-center gap-2 rounded-[8px] border-2 border-dashed border-ds-state-warning bg-ds-state-warning/10 px-4 py-3">
                   <Loader2 size={32} className="animate-[d-spin_0.9s_linear_infinite] text-ds-state-warning" />
                   <span className="text-[15px] font-semibold tracking-[0] text-ds-state-warning">
                     {isCancelPendingPhase ? t('Auto canceling...') : t('Waiting for SMS...')}
@@ -217,7 +250,7 @@ export function MessagesScreen(props: MessagesScreenProps) {
                 </div>
               )}
               {!isReceived && !isActivePhase && (
-                <div className="flex w-full flex-col gap-2 rounded-[12px] bg-ds-surface-subtle px-6 py-4 opacity-80">
+                <div className="flex w-full flex-col gap-1 rounded-[8px] bg-ds-surface-subtle px-4 py-2 opacity-80">
                   <strong className="text-[15px] font-semibold tracking-[0] text-ds-text-primary">
                     {ticket.message?.includes('auto cancel retry')
                       ? t('Activation still pending provider action')
@@ -231,7 +264,7 @@ export function MessagesScreen(props: MessagesScreenProps) {
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 pt-1 min-[760px]:flex-row min-[760px]:items-center min-[760px]:justify-between">
+              <div className="flex flex-col gap-2 pt-1 min-[760px]:flex-row min-[760px]:items-center min-[760px]:justify-between">
                 <div className="flex flex-col gap-1">
                   <span className="inline-flex items-center gap-2 text-[13px] leading-[1.43] text-ds-text-secondary">
                     <ResourceBadge kind="provider" value={ticket.provider} size="sm" iconUrl={providerIconUrl} fallbackLabel={providerBadgeLabel ?? undefined} />
@@ -293,6 +326,13 @@ export function MessagesScreen(props: MessagesScreenProps) {
         }) : (
           <div className="rounded-lg border border-ds-border bg-ds-surface px-5 py-7 text-center text-utility tracking-[var(--ds-type-utility-tracking)] text-ds-text-secondary shadow-ds backdrop-blur-ds">
             {t('No activations.')}
+          </div>
+        )}
+        {hasMore && visibleTickets.length > 0 && (
+          <div ref={loadMoreRef} className="flex items-center justify-center py-4">
+            {loading && (
+              <Loader2 size={20} className="animate-[d-spin_0.9s_linear_infinite] text-ds-accent-blue" />
+            )}
           </div>
         )}
       </div>

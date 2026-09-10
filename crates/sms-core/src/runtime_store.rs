@@ -48,6 +48,8 @@ pub struct RuntimeStoreBatch {
     pub reuse_bucket: Option<(String, Vec<ReusePoolEntry>)>,
     pub provider_balance: Option<ProviderBalanceCacheEntry>,
     pub clear_logs: bool,
+    pub clear_tickets: bool,
+    pub trim_tickets_limit: Option<usize>,
 }
 
 impl RuntimeStoreBatch {
@@ -63,6 +65,8 @@ impl RuntimeStoreBatch {
             && self.reuse_bucket.is_none()
             && self.provider_balance.is_none()
             && !self.clear_logs
+            && !self.clear_tickets
+            && self.trim_tickets_limit.is_none()
     }
 }
 
@@ -1272,6 +1276,20 @@ impl RuntimeStoreTx<'_, '_> {
             if batch.clear_logs {
                 state.logs.clear();
             }
+            if batch.clear_tickets {
+                state.tickets.clear();
+            }
+            if let Some(limit) = batch.trim_tickets_limit {
+                if state.tickets.len() > limit {
+                    state.tickets.sort_by(|left, right| {
+                        right
+                            .created_at
+                            .cmp(&left.created_at)
+                            .then_with(|| right.id.cmp(&left.id))
+                    });
+                    state.tickets.truncate(limit);
+                }
+            }
             if let Some(ticket) = batch.upsert_ticket.as_ref() {
                 state.tickets.retain(|current| current.id != ticket.id);
                 state.tickets.push(ticket.clone());
@@ -1336,6 +1354,12 @@ impl RuntimeStoreTx<'_, '_> {
         }
         if batch.clear_logs {
             self.clear_logs()?;
+        }
+        if batch.clear_tickets {
+            self.clear_tickets()?;
+        }
+        if let Some(limit) = batch.trim_tickets_limit {
+            self.trim_tickets(limit)?;
         }
         if let Some(ticket) = batch.upsert_ticket.as_ref() {
             self.upsert_ticket(ticket)?;
@@ -1470,6 +1494,29 @@ impl RuntimeStoreTx<'_, '_> {
         self.tx
             .execute("DELETE FROM logs", [])
             .map_err(|err| SmsError::Io(format!("clear logs failed: {err}")))?;
+        Ok(())
+    }
+
+    fn trim_tickets(&mut self, max_entries: usize) -> Result<(), SmsError> {
+        if max_entries == 0 {
+            return self.clear_tickets();
+        }
+        self.tx
+            .execute(
+                "DELETE FROM tickets
+                 WHERE id NOT IN (
+                   SELECT id FROM tickets ORDER BY created_at DESC, id DESC LIMIT ?1
+                 )",
+                [max_entries as i64],
+            )
+            .map_err(|err| SmsError::Io(format!("trim tickets failed: {err}")))?;
+        Ok(())
+    }
+
+    fn clear_tickets(&mut self) -> Result<(), SmsError> {
+        self.tx
+            .execute("DELETE FROM tickets", [])
+            .map_err(|err| SmsError::Io(format!("clear tickets failed: {err}")))?;
         Ok(())
     }
 
