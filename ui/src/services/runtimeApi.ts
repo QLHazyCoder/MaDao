@@ -57,6 +57,7 @@ import {
   pollActivationTicketViaSocket,
   replaceRoutingTicketViaSocket,
   regenerateHttpSecretViaSocket,
+  changeHttpSecretViaSocket,
   refreshProviderOptionsViaSocket,
   releaseActivationTicketViaSocket,
   reloadProviderRegistryViaSocket,
@@ -461,6 +462,18 @@ export async function regenerateHttpSecret(): Promise<RuntimeSettings> {
   return readJson<RuntimeSettings>(await fetch(`${API_BASE}/api/settings/runtime/regenerate-secret`, {
     method: 'POST',
     headers: IS_DESKTOP_RUNTIME ? await buildDesktopHttpHeaders(false) : undefined,
+  }));
+}
+
+export async function changeHttpSecret(newSecret: string): Promise<RuntimeSettings> {
+  if (USE_SOCKET_TRANSPORT) return changeHttpSecretViaSocket(newSecret);
+  return readJson<RuntimeSettings>(await fetch(`${API_BASE}/api/settings/runtime/change-secret`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(IS_DESKTOP_RUNTIME ? await buildDesktopHttpHeaders(false) : {}),
+    },
+    body: JSON.stringify({ new_secret: newSecret }),
   }));
 }
 

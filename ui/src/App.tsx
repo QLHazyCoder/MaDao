@@ -434,6 +434,7 @@ export function App() {
     updateRuntimeSettings,
     reloadRuntimeAccessInfo,
     refreshHttpSecret,
+    changeHttpSecretAndLogout,
     fetchBalance,
     fetchVisibleBalances,
     refreshProvider,
@@ -2642,11 +2643,8 @@ export function App() {
                   }))}
                 onSyncStatsNow={() => void handleSyncStatsNow()}
                 syncStatsBusy={busyAction === 'sync-ticket-stats'}
-                onRegenerateHttpSecret={() =>
-                  void refreshHttpSecret().then((info) => {
-                    if (info) setRuntimeAccessInfo(info);
-                  })}
-                regenerateSecretBusy={busyAction === 'regenerate-http-secret'}
+                onChangeHttpSecret={(newSecret) => void changeHttpSecretAndLogout(newSecret)}
+                changeSecretBusy={busyAction === 'change-http-secret'}
                 onCheckForUpdates={() => void handleCheckForUpdates('manual')}
                 apiBase={API_BASE}
                 socketPath={SOCKET_PATH}

@@ -59,6 +59,9 @@ pub enum SocketCommand {
         request: RuntimeSettingsUpdate,
     },
     RegenerateHttpSecret,
+    ChangeHttpSecret {
+        new_secret: String,
+    },
     RuntimeAccessInfo,
     SyncTicketStats,
     RemoteStatsSummary {

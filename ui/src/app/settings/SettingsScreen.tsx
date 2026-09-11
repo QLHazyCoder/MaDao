@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { Download, ExternalLink, Minus, Moon, Plus, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Modal } from '../../components/overlays';
 import {
   AppButton,
   PageHeader,
@@ -55,8 +57,10 @@ export type SettingsScreenProps = {
   onStatsSyncEnabledChange: (enabled: boolean) => void;
   onSyncStatsNow: () => void;
   syncStatsBusy: boolean;
-  onRegenerateHttpSecret: () => void;
-  regenerateSecretBusy: boolean;
+  onRegenerateHttpSecret?: () => void;
+  regenerateSecretBusy?: boolean;
+  onChangeHttpSecret: (newSecret: string) => void;
+  changeSecretBusy: boolean;
   onCheckForUpdates: () => void;
   apiBase: string;
   socketPath: string;
@@ -102,6 +106,22 @@ export function SettingsScreen(props: SettingsScreenProps) {
     const parsed = Number.parseInt(trimmed, 10);
     if (!Number.isFinite(parsed)) return;
     props.onHttpPortChange(Math.max(1, Math.min(65535, parsed)));
+  }
+  const [showChangeSecretModal, setShowChangeSecretModal] = useState(false);
+  const [newSecretInput, setNewSecretInput] = useState('');
+  const [confirmSecretInput, setConfirmSecretInput] = useState('');
+  function handleAutoGenerate() {
+    const uuid = crypto.randomUUID().replace(/-/g, '');
+    setNewSecretInput(uuid);
+    setConfirmSecretInput(uuid);
+    navigator.clipboard.writeText(uuid);
+  }
+  function handleChangeSecretConfirm() {
+    if (!newSecretInput.trim() || newSecretInput !== confirmSecretInput) return;
+    props.onChangeHttpSecret(newSecretInput.trim());
+    setShowChangeSecretModal(false);
+    setNewSecretInput('');
+    setConfirmSecretInput('');
   }
   const statsStatusText = [
     props.statsSyncPendingEvents != null ? `${t('Pending events')}: ${props.statsSyncPendingEvents}` : null,
@@ -228,9 +248,14 @@ export function SettingsScreen(props: SettingsScreenProps) {
               <div className="inline-block max-w-full overflow-x-auto rounded-xs border border-ds-border bg-ds-surface-subtle px-2.5 py-[5px] font-mono text-caption text-ds-text-secondary">
                 {props.httpSecret}
               </div>
-              <AppButton variant="outline" size="utility" onClick={props.onRegenerateHttpSecret} disabled={props.regenerateSecretBusy}>
-                {props.regenerateSecretBusy ? t('Regenerating…') : t('Regenerate')}
+              <AppButton variant="outline" size="utility" onClick={() => navigator.clipboard.writeText(props.httpSecret)}>
+                {t('Copy')}
               </AppButton>
+              {!props.httpSecretOverridden && (
+                <AppButton variant="outline" size="utility" onClick={() => setShowChangeSecretModal(true)}>
+                  {t('Change Password')}
+                </AppButton>
+              )}
             </div>
           </ServerConfigRow>
           {props.httpSecretOverridden ? (
@@ -340,6 +365,68 @@ export function SettingsScreen(props: SettingsScreenProps) {
           </div>
         </div>
       </div>
+      <Modal
+        open={showChangeSecretModal}
+        title={t('Change Password')}
+        subtitle={t('After changing, all devices will be logged out. You need to login with the new password.')}
+        onClose={() => { setShowChangeSecretModal(false); setNewSecretInput(''); setConfirmSecretInput(''); }}
+        footer={
+          <>
+            <AppButton variant="outline" size="utility" onClick={() => { setShowChangeSecretModal(false); setNewSecretInput(''); setConfirmSecretInput(''); }}>
+              {t('Cancel')}
+            </AppButton>
+            <AppButton variant="primary" size="utility" onClick={handleChangeSecretConfirm} disabled={!newSecretInput.trim() || newSecretInput !== confirmSecretInput || props.changeSecretBusy}>
+              {props.changeSecretBusy ? t('Changing…') : t('Confirm')}
+            </AppButton>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="font-text text-utility font-normal tracking-[var(--ds-type-utility-tracking)] text-ds-text-secondary">
+              {t('Current Password')}
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="inline-block max-w-full flex-1 overflow-x-auto rounded-xs border border-ds-border bg-ds-surface-subtle px-2.5 py-[5px] font-mono text-caption text-ds-text-secondary">
+                {props.httpSecret}
+              </div>
+              <AppButton variant="outline" size="utility" onClick={() => navigator.clipboard.writeText(props.httpSecret)}>
+                {t('Copy')}
+              </AppButton>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="font-text text-utility font-normal tracking-[var(--ds-type-utility-tracking)] text-ds-text-secondary">
+              {t('New Password')}
+            </label>
+            <div className="flex items-center gap-2">
+              <TextField
+                value={newSecretInput}
+                onChange={(e) => setNewSecretInput(e.target.value)}
+                placeholder={t('Enter new password or click Auto Generate')}
+                fullWidth
+              />
+              <AppButton variant="outline" size="utility" onClick={handleAutoGenerate}>
+                {t('Auto Generate')}
+              </AppButton>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="font-text text-utility font-normal tracking-[var(--ds-type-utility-tracking)] text-ds-text-secondary">
+              {t('Confirm Password')}
+            </label>
+            <TextField
+              value={confirmSecretInput}
+              onChange={(e) => setConfirmSecretInput(e.target.value)}
+              placeholder={t('Re-enter new password')}
+              fullWidth
+            />
+            {newSecretInput && confirmSecretInput && newSecretInput !== confirmSecretInput && (
+              <span className="text-[12px] leading-[1.45] text-ds-danger">{t('Passwords do not match')}</span>
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

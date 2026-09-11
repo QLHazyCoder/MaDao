@@ -3826,6 +3826,25 @@ impl SmsService {
         Ok(updated)
     }
 
+    pub fn change_http_secret(&self, new_secret: &str) -> Result<RuntimeSettings, SmsError> {
+        let secret = new_secret.trim().to_string();
+        if secret.is_empty() {
+            return Err(SmsError::InvalidRequest(
+                "http secret cannot be empty".into(),
+            ));
+        }
+        let updated = {
+            let current = self.runtime_settings.read();
+            let mut next = current.clone();
+            next.http_secret = secret;
+            next
+        };
+        self.runtime_config_repository.save_settings(&updated)?;
+        *self.runtime_settings.write() = updated.clone();
+        self.log("config", "info", "http secret changed");
+        Ok(updated)
+    }
+
     pub fn effective_http_secret(&self, overridden_secret: Option<&str>) -> String {
         overridden_secret
             .map(|value| value.trim().to_string())

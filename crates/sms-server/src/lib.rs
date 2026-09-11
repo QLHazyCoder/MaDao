@@ -8,13 +8,13 @@ use parking_lot::RwLock;
 use serde::Serialize;
 use sms_core::config::ServerConfig;
 use sms_core::models::{
-    AcquireCodeRequest, HttpAuthLoginRequest, HttpAuthStatus, NotificationFeed,
-    OptionCacheOverview, PollCodeRequest, ProviderManifestList, ProviderOperatorsQuery,
-    ProviderPriceQuery, ProviderReorderRequest, ProviderServicesQuery, ReleaseCodeRequest,
-    RemoteStatsSummaryQuery, RemoteStatsSummaryResponse, ReusePoolClearResponse,
-    RoutingFailoverRequest, RoutingPlan, RoutingPlanList, RoutingReplaceRequest, RuntimeAccessInfo,
-    RuntimeSettings, RuntimeSettingsUpdate, RuntimeSnapshot, StatsSyncResult,
-    TicketCallbackRegistrationRequest, TicketListResponse,
+    AcquireCodeRequest, ChangeHttpSecretRequest, HttpAuthLoginRequest, HttpAuthStatus,
+    NotificationFeed, OptionCacheOverview, PollCodeRequest, ProviderManifestList,
+    ProviderOperatorsQuery, ProviderPriceQuery, ProviderReorderRequest, ProviderServicesQuery,
+    ReleaseCodeRequest, RemoteStatsSummaryQuery, RemoteStatsSummaryResponse,
+    ReusePoolClearResponse, RoutingFailoverRequest, RoutingPlan, RoutingPlanList,
+    RoutingReplaceRequest, RuntimeAccessInfo, RuntimeSettings, RuntimeSettingsUpdate,
+    RuntimeSnapshot, StatsSyncResult, TicketCallbackRegistrationRequest, TicketListResponse,
 };
 use sms_core::service::SmsService;
 #[cfg(unix)]
@@ -131,6 +131,9 @@ async fn handle_socket_command(service: &SmsService, line: &str) -> String {
             }
             SocketCommand::RegenerateHttpSecret => {
                 wrap_socket_plain_result(service.regenerate_http_secret())
+            }
+            SocketCommand::ChangeHttpSecret { new_secret } => {
+                wrap_socket_plain_result(service.change_http_secret(&new_secret))
             }
             SocketCommand::RuntimeAccessInfo => {
                 wrap_socket_plain_result(Ok(service.runtime_access_info(None)))
@@ -326,6 +329,10 @@ pub fn build_router(
         .route(
             "/api/settings/runtime/regenerate-secret",
             post(regenerate_http_secret),
+        )
+        .route(
+            "/api/settings/runtime/change-secret",
+            post(change_http_secret),
         )
         .route("/api/settings/stats/sync", post(sync_ticket_stats))
         .route(
@@ -758,6 +765,27 @@ async fn regenerate_http_secret(
     state.service.log_http_access(
         "POST",
         "/api/settings/runtime/regenerate-secret",
+        if result.is_ok() { "200" } else { "400" },
+    );
+    result
+}
+
+async fn change_http_secret(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<ChangeHttpSecretRequest>,
+) -> Result<Json<RuntimeSettings>, (StatusCode, Json<ApiError>)> {
+    ensure_http_authenticated(&state, &headers)?;
+    state.sessions.write().clear();
+    persist_session_for_state(&state);
+    let result = state
+        .service
+        .change_http_secret(&request.new_secret)
+        .map(Json)
+        .map_err(to_api_error);
+    state.service.log_http_access(
+        "POST",
+        "/api/settings/runtime/change-secret",
         if result.is_ok() { "200" } else { "400" },
     );
     result

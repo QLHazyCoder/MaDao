@@ -960,8 +960,8 @@ function renderPageTarget(target: ScreenshotTarget, t: (key: string, options?: R
         onInstallUpdate={noop}
         onOpenUpdateRelease={noop}
         onHttpPortChange={noop}
-        onRegenerateHttpSecret={noop}
-        regenerateSecretBusy={false}
+        onChangeHttpSecret={noop}
+        changeSecretBusy={false}
         onCheckForUpdates={noop}
         statsSyncEnabled
         onStatsSyncEnabledChange={noop}

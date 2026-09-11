@@ -132,6 +132,10 @@ export function regenerateHttpSecretViaSocket(): Promise<RuntimeSettings> {
   return socketInvoke<RuntimeSettings>('regenerate_http_secret');
 }
 
+export function changeHttpSecretViaSocket(newSecret: string): Promise<RuntimeSettings> {
+  return socketInvoke<RuntimeSettings>('change_http_secret', { new_secret: newSecret });
+}
+
 export function fetchRuntimeAccessInfoViaSocket(): Promise<RuntimeAccessInfo> {
   return socketInvoke<RuntimeAccessInfo>('runtime_access_info');
 }

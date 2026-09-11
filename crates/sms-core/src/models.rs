@@ -593,6 +593,11 @@ pub struct HttpAuthStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeHttpSecretRequest {
+    pub new_secret: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderManifestSaveResponse {
     pub manifest: ProviderManifest,
     pub option_cache_state: OptionCacheState,

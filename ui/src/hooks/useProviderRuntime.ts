@@ -26,6 +26,7 @@ import {
   fetchRuntimeSettings,
   fetchRuntimeSnapshot,
   regenerateHttpSecret,
+  changeHttpSecret,
   reloadProviderRegistry,
   reorderProviderManifests,
   saveProviderManifest,
@@ -474,6 +475,20 @@ export function useProviderRuntime(
     }
   }
 
+  async function changeHttpSecretAndLogout(newSecret: string) {
+    try {
+      ui.setBusyAction('change-http-secret');
+      const settings = await changeHttpSecret(newSecret);
+      data.setRuntimeSettings(settings);
+      document.cookie = 'madao_http_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      window.location.href = '/login';
+    } catch (error) {
+      ui.setStatusMessage(translate('failed_change_http_secret', { error: formatError(error) }));
+    } finally {
+      ui.setBusyAction('');
+    }
+  }
+
   async function fetchBalance(providerId: string) {
     try {
       ui.setBusyAction(`balance-${providerId}`);
@@ -628,6 +643,7 @@ export function useProviderRuntime(
     updateRuntimeSettings,
     reloadRuntimeAccessInfo,
     refreshHttpSecret,
+    changeHttpSecretAndLogout,
     fetchBalance,
     fetchVisibleBalances,
     refreshProvider,
