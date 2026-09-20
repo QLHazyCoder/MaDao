@@ -725,6 +725,7 @@ function renderPageTarget(target: ScreenshotTarget, t: (key: string, options?: R
         onRefresh={noop}
         onFetchPrices={noop}
         onSave={noop}
+        onTestApiKey={noop}
         onClearReusePool={noop}
         onOpenRawJson={noop}
         onOpenSelector={noop}
@@ -775,6 +776,7 @@ function renderPageTarget(target: ScreenshotTarget, t: (key: string, options?: R
         onRefresh={noop}
         onFetchPrices={noop}
         onSave={noop}
+        onTestApiKey={noop}
         onClearReusePool={noop}
         onOpenRawJson={noop}
         onOpenSelector={noop}
@@ -824,6 +826,7 @@ function renderPageTarget(target: ScreenshotTarget, t: (key: string, options?: R
         onRefresh={noop}
         onFetchPrices={noop}
         onSave={noop}
+        onTestApiKey={noop}
         onClearReusePool={noop}
         onOpenRawJson={noop}
         onOpenSelector={noop}

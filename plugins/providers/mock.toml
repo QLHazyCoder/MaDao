@@ -1,7 +1,7 @@
 id = "mock"
 name = "Mock Provider"
 kind = "mock"
-enabled = true
+enabled = false
 description = "本地联调 provider，可编辑并支持热重载。"
 
 [service_aliases]

@@ -1,4 +1,4 @@
-import { startTransition, useMemo } from 'react';
+import { startTransition, useMemo, useState } from 'react';
 import type {
   ActivationFormState,
   LanguageCode,
@@ -112,6 +112,10 @@ export function useProviderRuntime(
 ) {
   const translate = i18n.getFixedT(ui.language);
   const formatError = (error: unknown) => formatProviderErrorMessage(error, ui.language);
+
+  const [testApiKeyBusy, setTestApiKeyBusy] = useState(false);
+  const [testResult, setTestResult] = useState<'success' | 'failure' | null>(null);
+  const [testedApiKey, setTestedApiKey] = useState<string | null>(null);
 
   const manageableProviders = useMemo(
     () => Object.values(data.manifests).filter((provider) => provider.id !== 'mock' && provider.kind !== 'mock'),
@@ -371,6 +375,32 @@ export function useProviderRuntime(
       ui.setShowManifestModal(false);
     } catch (error) {
       ui.setStatusMessage(translate('save_failed', { error: formatError(error) }));
+    }
+  }
+
+  async function testApiKey(providerId: string): Promise<boolean> {
+    try {
+      setTestApiKeyBusy(true);
+      setTestResult(null);
+      const manifest = JSON.parse(data.rawEditors[providerId] ?? '{}') as ProviderManifest;
+      await saveProviderManifest(providerId, manifest);
+      await refreshProviderOptions(providerId);
+      await Promise.all([loadManifests(), loadSnapshot()]);
+      const currentApiKey = String(
+        (manifest.handler_api as Record<string, unknown>)?.api_key
+        ?? (manifest.five_sim as Record<string, unknown>)?.api_key
+        ?? ''
+      );
+      setTestedApiKey(currentApiKey);
+      setTestResult('success');
+      ui.setStatusMessage(translate('api_key_valid'));
+      return true;
+    } catch {
+      setTestResult('failure');
+      ui.setStatusMessage(translate('api_key_invalid'));
+      return false;
+    } finally {
+      setTestApiKeyBusy(false);
     }
   }
 
@@ -639,6 +669,10 @@ export function useProviderRuntime(
     updateManifestField,
     toggleProviderEnabled,
     saveProvider,
+    testApiKey,
+    testApiKeyBusy,
+    testResult,
+    testedApiKey,
     reloadProviders,
     updateRuntimeSettings,
     reloadRuntimeAccessInfo,

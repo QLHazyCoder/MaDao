@@ -69,6 +69,9 @@ export type ProviderWorkspaceScreenProps = {
   onRefresh: () => void;
   onFetchPrices: () => void;
   onSave: () => void;
+  onTestApiKey?: () => void;
+  testApiKeyBusy?: boolean;
+  testResult?: 'success' | 'failure' | null;
   onClearReusePool: () => void;
   onOpenRawJson: () => void;
   onOpenSelector: (kind: SelectorKind) => void;
@@ -140,6 +143,9 @@ export function ProviderWorkspaceScreen(props: ProviderWorkspaceScreenProps) {
             onToggleEnabled={props.onToggleEnabled}
             onRefresh={props.onRefresh}
             onSave={props.onSave}
+            onTestApiKey={props.onTestApiKey}
+            testApiKeyBusy={props.testApiKeyBusy}
+            testResult={props.testResult}
             onClearReusePool={props.onClearReusePool}
             onOpenRawJson={props.onOpenRawJson}
             onOpenSelector={props.onOpenSelector}
@@ -202,6 +208,9 @@ function WorkspaceConfig(props: {
   onToggleEnabled: (enabled: boolean) => void;
   onRefresh: () => void;
   onSave: () => void;
+  onTestApiKey?: () => void;
+  testApiKeyBusy?: boolean;
+  testResult?: 'success' | 'failure' | null;
   onClearReusePool: () => void;
   onOpenRawJson: () => void;
   onOpenSelector: (kind: SelectorKind) => void;
@@ -286,17 +295,34 @@ function WorkspaceConfig(props: {
 
       <div className="overflow-hidden rounded-[10px] border border-[var(--ds-color-card-border)] bg-ds-surface shadow-ds backdrop-blur-ds">
         <ConfigRow label="API 密钥">
-          <input
-            className={cx(
-              'min-h-control w-full rounded-sm border border-ds-border-strong bg-ds-surface px-4 py-[11px] text-utility tracking-[var(--ds-type-utility-tracking)] text-ds-text-primary',
-              props.compact && 'min-h-control-compact px-3 py-2',
+          <div className="flex items-center gap-2 w-full">
+            <input
+              className={cx(
+                'min-h-control flex-1 rounded-sm border border-ds-border-strong bg-ds-surface px-4 py-[11px] text-utility tracking-[var(--ds-type-utility-tracking)] text-ds-text-primary',
+                props.compact && 'min-h-control-compact px-3 py-2',
+              )}
+              type="password"
+              value={props.apiKeyValue}
+              onChange={(e) => props.onApiKeyChange(e.target.value)}
+              placeholder={t('Paste provider API key')}
+            />
+            {props.onTestApiKey && (
+              <AppButton variant="outline" size="utility" onClick={props.onTestApiKey} disabled={props.testApiKeyBusy || props.busyAction.includes('save')}>
+                {props.testApiKeyBusy ? t('Testing…') : t('Test')}
+              </AppButton>
             )}
-            type="password"
-            value={props.apiKeyValue}
-            onChange={(e) => props.onApiKeyChange(e.target.value)}
-            placeholder={t('Paste provider API key')}
-          />
+          </div>
         </ConfigRow>
+        {props.testResult === 'success' && (
+          <div className="px-5 pb-2">
+            <StatusBadge tone="green">{t('API key valid')}</StatusBadge>
+          </div>
+        )}
+        {props.testResult === 'failure' && (
+          <div className="px-5 pb-2">
+            <StatusBadge tone="orange">{t('API key invalid')}</StatusBadge>
+          </div>
+        )}
         <ConfigRow label={t('Reuse phone')}>
           <div className="flex justify-end">
             <ToggleSwitch

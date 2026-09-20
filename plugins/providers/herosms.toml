@@ -1,7 +1,7 @@
 id = "herosms"
 name = "HeroSMS"
 kind = "handler_api"
-enabled = true
+enabled = false
 priority = 20
 homepage = "https://hero-sms.com/"
 description = "兼容 HeroSMS 的 handler_api.php 风格 provider。"

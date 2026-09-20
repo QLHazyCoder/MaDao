@@ -1,7 +1,7 @@
 id = "smsbower"
 name = "SmsBower"
 kind = "handler_api"
-enabled = true
+enabled = false
 priority = 30
 homepage = "https://smsbower.app/"
 description = "兼容 SmsBower 的 handler_api.php 风格 provider。"

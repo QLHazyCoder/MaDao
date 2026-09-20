@@ -430,6 +430,10 @@ export function App() {
     updateManifestField,
     toggleProviderEnabled,
     saveProvider,
+    testApiKey,
+    testApiKeyBusy,
+    testResult,
+    testedApiKey,
     reloadProviders,
     updateRuntimeSettings,
     reloadRuntimeAccessInfo,
@@ -2536,6 +2540,9 @@ export function App() {
                 onRefresh={() => void refreshProvider(selectedProvider)}
                 onFetchPrices={() => void fetchPrices(selectedProvider)}
                 onSave={() => void saveProvider(selectedProvider)}
+                onTestApiKey={() => void testApiKey(selectedProvider)}
+                testApiKeyBusy={testApiKeyBusy}
+                testResult={testResult}
                 onClearReusePool={() => void clearReusePool(selectedProvider)}
                 onOpenRawJson={() => setShowManifestModal(true)}
                 onOpenSelector={openSelector}
